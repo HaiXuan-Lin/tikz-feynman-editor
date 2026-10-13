@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A visual editor for Feynman diagrams, with QED/QCD components, loop templates and TikZ-Feynman export."
+    />
+    <title>TikZ Feynman Editor</title>
+    <link rel="stylesheet" href="./css/master.css" />
+    <link rel="icon" href="./favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="./img/app-icon.svg" />
+    <script
+      defer
+      src="./vendor/mathjax/MathJax.js?config=TeX-AMS_SVG"
+      onload="window.dispatchEvent(new Event('mathjax-loaded'))"
+    ></script>
+    <script defer src="./bundle.js"></script>
+  </head>
+  <body>
+    <div id="app"><div class="startup-message">Opening editor…</div></div>
+    <noscript>Please enable JavaScript to use the editor.</noscript>
+  </body>
+</html>

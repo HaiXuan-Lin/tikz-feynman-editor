@@ -1,0 +1,27 @@
+# Dependencies and generated web assets
+node_modules/
+dist/
+vendor/
+/bundle.js
+/bundle.js.map
+
+# Native build output and temporary workspaces
+/*.app/
+/.build-*/
+/.tikz-feynman-install.*/
+*.dSYM/
+*.xcresult/
+
+# Test output, logs, local settings and secrets
+coverage/
+.nyc_output/
+*.log
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# macOS metadata
+.DS_Store
+._*

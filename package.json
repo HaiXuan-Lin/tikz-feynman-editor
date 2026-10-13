@@ -1,0 +1,54 @@
+{
+  "name": "tikz-feynman-editor",
+  "version": "2.0.0",
+  "description": "A visual Feynman diagram editor with an extensible component library and native macOS packaging.",
+  "main": "src/index.jsx",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HaiXuan-Lin/tikz-feynman-editor.git"
+  },
+  "keywords": [
+    "physics",
+    "tikz-feynman",
+    "tikz",
+    "latex",
+    "diagram",
+    "editor",
+    "mathematics"
+  ],
+  "author": "Ross Dempsey",
+  "license": "MIT",
+  "homepage": "https://haixuan-lin.github.io/tikz-feynman-editor/",
+  "bugs": {
+    "url": "https://github.com/HaiXuan-Lin/tikz-feynman-editor/issues"
+  },
+  "dependencies": {
+    "lz-string": "1.5.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "mathjax": "2.7.6",
+    "prettier": "3.9.10"
+  },
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "dist": "node scripts/dist.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build:macos": "bash ./build.sh",
+    "install:macos": "bash ./install.sh",
+    "format": "prettier --write src scripts tests css index.html README.md package.json",
+    "format:check": "prettier --check src scripts tests css index.html README.md package.json"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "semi": false,
+    "bracketSpacing": false,
+    "printWidth": 90
+  }
+}
