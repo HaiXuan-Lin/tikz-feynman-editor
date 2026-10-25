@@ -1,12 +1,5 @@
-import {
-  GRID,
-  INK,
-  lineStyle,
-  vertices,
-  propagators,
-  arrowStyles,
-  doubleArrow,
-} from './catalog.mjs'
+import {GRID, lineStyle, vertices, propagators, arrowStyles} from './catalog.mjs'
+import {arrowPositions, TEX_POINTS_PER_UNIT} from './styles.mjs'
 import {edgeCurve} from './geometry.mjs'
 
 let sequence = 0
@@ -15,6 +8,7 @@ export const uid = (prefix) =>
 export const clone = (value) => JSON.parse(JSON.stringify(value))
 export const emptyDiagram = () => ({
   version: 2,
+  styleDefaults: 'tikz-feynman',
   title: 'Untitled diagram',
   nodes: [],
   edges: [],
@@ -26,8 +20,8 @@ export const node = (x, y, props = {}) => ({
   position: [x, y],
   value: '',
   vertex: 'dot',
-  color: INK,
-  size: 5,
+  color: null,
+  size: null,
   attachment: null,
   ...props,
 })
@@ -37,8 +31,8 @@ export const edge = (from, to, line = 'fermion', props = {}) => ({
   to,
   line,
   arrow: lineStyle(line).arrow,
-  arrowAt: doubleArrow(props.arrow ?? lineStyle(line).arrow) ? 0.35 : 0.5,
-  arrowAt2: 0.65,
+  arrowAt: arrowPositions(line, props.arrow ?? lineStyle(line).arrow)[0],
+  arrowAt2: arrowPositions(line, props.arrow ?? lineStyle(line).arrow)[1],
   value: '',
   momentum: '',
   bend: 0,
@@ -46,13 +40,13 @@ export const edge = (from, to, line = 'fermion', props = {}) => ({
   ellipseRatio: 1,
   labelPosition: 'left',
   labelAt: 0.5,
-  momentumPosition: 'right',
+  momentumPosition: 'left',
   momentumAt: 0.5,
-  momentumDistance: 32,
+  momentumDistance: null,
   crossingGap: true,
   gapSize: 12,
-  color: INK,
-  width: 1.8,
+  color: null,
+  width: null,
   loopDirection: 'top',
   loopSize: 60,
   insertion: false,
@@ -62,7 +56,7 @@ export const annotation = (x, y, value = '\\mathcal{M} =') => ({
   id: uid('t'),
   position: [x, y],
   value,
-  color: INK,
+  color: null,
   size: 20,
 })
 export const key = (kind, id) => `${kind}:${id}`
@@ -73,7 +67,6 @@ export const snap = (position, enabled = true) =>
 const bounded = (value, fallback, min, max) =>
   Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback
 const text = (value) => (typeof value === 'string' ? value.slice(0, 10000) : '')
-const color = (value) => (/^#[0-9a-f]{6}$/i.test(value || '') ? value : INK)
 const position = (value) => {
   if (
     !Array.isArray(value) ||
@@ -100,6 +93,19 @@ export function parseDiagram(input) {
     throw new Error('项目超过支持的图形数量。')
   if (source.version != null && ![1, 2].includes(source.version))
     throw new Error('不支持此项目版本。')
+  const nativeDefaults = source.styleDefaults === 'tikz-feynman'
+  // Older projects stored editor-imposed defaults as numbers. Preserve their
+  // custom values, while migrating the old defaults to package inheritance.
+  const inherited = (value, oldDefault, min, max) =>
+    value == null || (!nativeDefaults && Number(value) === oldDefault)
+      ? null
+      : bounded(value, null, min, max)
+  const color = (value) =>
+    !value || (!nativeDefaults && value === '#282a30')
+      ? null
+      : /^#[0-9a-f]{6}$/i.test(value)
+        ? value
+        : null
   const legacy = source.version !== 2
   const ids = new Set()
   const nodes = source.nodes.map((n) => {
@@ -112,7 +118,7 @@ export function parseDiagram(input) {
       value: text(n.value),
       vertex: vertices.some((v) => v.id === n.vertex) ? n.vertex : 'none',
       color: color(n.color),
-      size: bounded(n.size, 5, 2, 24),
+      size: inherited(n.size, 5, 0.1, 200),
       attachment:
         !legacy && n.attachment
           ? {edge: text(n.attachment.edge), t: bounded(n.attachment.t, 0.5, 0.02, 0.98)}
@@ -135,20 +141,36 @@ export function parseDiagram(input) {
     edgeIds.add(id)
     return edge(from, to, line, {
       id,
-      arrow: arrowStyles.includes(e.arrow)
-        ? e.arrow
-        : legacy && e.charge === -1
-          ? 'backward'
-          : lineStyle(line).arrow,
+      arrow:
+        !nativeDefaults && line === 'ghost' && e.arrow === 'forward'
+          ? 'none'
+          : arrowStyles.includes(e.arrow)
+            ? e.arrow
+            : legacy && e.charge === -1
+              ? 'backward'
+              : lineStyle(line).arrow,
       arrowAt: bounded(
-        e.arrowAt,
-        doubleArrow(arrowStyles.includes(e.arrow) ? e.arrow : lineStyle(line).arrow)
-          ? 0.35
-          : 0.5,
+        !nativeDefaults && line === 'majorana' && e.arrow === 'both' && e.arrowAt === 0.35
+          ? 0.33
+          : e.arrowAt,
+        arrowPositions(
+          line,
+          arrowStyles.includes(e.arrow) ? e.arrow : lineStyle(line).arrow,
+        )[0],
         0.01,
         0.99,
       ),
-      arrowAt2: bounded(e.arrowAt2, 0.65, 0.01, 0.99),
+      arrowAt2: bounded(
+        !nativeDefaults &&
+          line === 'majorana' &&
+          e.arrow === 'both' &&
+          e.arrowAt2 === 0.65
+          ? 0.73
+          : e.arrowAt2,
+        arrowPositions(line, e.arrow ?? lineStyle(line).arrow)[1],
+        0.01,
+        0.99,
+      ),
       value: text(e.value),
       momentum: text(e.momentum),
       bend: bounded(e.bend, 0, -90, 90),
@@ -158,13 +180,13 @@ export function parseDiagram(input) {
         ? e.labelPosition
         : 'left',
       labelAt: bounded(e.labelAt, 0.5, 0.1, 0.9),
-      momentumPosition: e.momentumPosition === 'left' ? 'left' : 'right',
+      momentumPosition: e.momentumPosition === 'right' ? 'right' : 'left',
       momentumAt: bounded(e.momentumAt, 0.5, 0.1, 0.9),
-      momentumDistance: bounded(e.momentumDistance, 32, 15, 100),
+      momentumDistance: inherited(e.momentumDistance, 32, 0, 100),
       crossingGap: e.crossingGap !== false,
       gapSize: bounded(e.gapSize, 12, 4, 40),
       color: color(e.color),
-      width: bounded(e.width, 1.8, 0.5, 6),
+      width: inherited(e.width, 1.8, 0.1 / TEX_POINTS_PER_UNIT, 6 / TEX_POINTS_PER_UNIT),
       loopDirection: ['top', 'right', 'bottom', 'left'].includes(e.loopDirection)
         ? e.loopDirection
         : 'top',
@@ -215,6 +237,7 @@ export function parseDiagram(input) {
       throw new Error('Invalid vertex attachment.')
   return resolveAttachments({
     version: 2,
+    styleDefaults: 'tikz-feynman',
     title: text(source.title) || 'Imported diagram',
     nodes,
     edges,

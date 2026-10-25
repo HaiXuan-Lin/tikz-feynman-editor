@@ -1,4 +1,12 @@
 import {GRID, doubleArrow} from './catalog.mjs'
+import {
+  vertexRadius,
+  lineWidth,
+  momentumDistance,
+  TEX_POINTS_PER_UNIT,
+  arrowPositions,
+  DEFAULT_STROKE,
+} from './styles.mjs'
 
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1]]
 export const scale = (p, t) => [p[0] * t, p[1] * t]
@@ -84,36 +92,37 @@ export function edgeGeometry(from, to, edge) {
     return arc
   })
   const trimmed =
-    edge.from === edge.to
-      ? 0
-      : Math.min(
-          0.08,
-          Math.max(
-            from.vertex === 'blob' ? 15 : from.size || 5,
-            to.vertex === 'blob' ? 15 : to.size || 5,
-          ) / Math.max(arc, 1),
-        )
-  const at = (ratio) => curve(trimmed + ratio * (1 - 2 * trimmed))
-  const cycles = Math.max(2, Math.round(arc / (edge.line === 'gluon' ? 14 : 19)))
+    edge.from === edge.to ? 0 : Math.min(0.45, vertexRadius(from) / Math.max(arc, 1))
+  const endTrimmed =
+    edge.from === edge.to ? 0 : Math.min(0.45, vertexRadius(to) / Math.max(arc, 1))
+  const at = (ratio) => curve(trimmed + ratio * (1 - trimmed - endTrimmed))
+  const cycles = Math.max(1, Math.floor(arc / (edge.line === 'gluon' ? 12 : 16)))
   const points = (wave = false, offset = 0) =>
     samples
       .map((sample, i) => {
         const t = i / 180
-        if (t < trimmed || t > 1 - trimmed) return null
+        if (t < trimmed || t > 1 - endTrimmed) return null
         const wavePhase = (distances[i] / Math.max(arc, 1)) * cycles * Math.PI * 2
         let p = add(sample.point, scale(normal(sample.tangent), offset))
         if (wave) {
-          const amplitude = edge.line === 'gluon' ? 6.5 : 4
+          const amplitude = edge.line === 'gluon' ? 2.5 / TEX_POINTS_PER_UNIT : 4
           p = add(p, scale(normal(sample.tangent), Math.sin(wavePhase) * amplitude))
           if (edge.line === 'gluon')
-            p = add(p, scale(sample.tangent, (Math.cos(wavePhase) - 1) * 4))
+            p = add(
+              p,
+              scale(sample.tangent, (Math.cos(wavePhase) - 1) * 0.75 * amplitude),
+            )
         }
         return p
       })
       .filter(Boolean)
   const wavy = ['photon', 'charged-boson', 'gluon', 'graviton'].includes(edge.line)
+  const doubleOffset = (0.6 / TEX_POINTS_PER_UNIT + lineWidth(edge)) / 2
   const paths = ['double', 'graviton'].includes(edge.line)
-    ? [pathFromPoints(points(wavy, -2.7)), pathFromPoints(points(wavy, 2.7))]
+    ? [
+        pathFromPoints(points(wavy, -doubleOffset)),
+        pathFromPoints(points(wavy, doubleOffset)),
+      ]
     : [pathFromPoints(points(wavy))]
   // Percentages follow distance along the visible curve, including ellipses/loops.
   const distanceAt = (t) => {
@@ -125,7 +134,7 @@ export function edgeGeometry(from, to, edge) {
   }
   const arrowAt = (ratio) => {
     const start = distanceAt(trimmed),
-      end = distanceAt(1 - trimmed)
+      end = distanceAt(1 - endTrimmed)
     const target = start + ratio * (end - start)
     let i = 1
     while (i < distances.length - 1 && distances[i] < target) i++
@@ -137,13 +146,13 @@ export function edgeGeometry(from, to, edge) {
       ? []
       : [
           arrowPolygon(
-            arrowAt(edge.arrowAt ?? (doubleArrow(edge.arrow) ? 0.35 : 0.5)),
+            arrowAt(edge.arrowAt ?? arrowPositions(edge.line, edge.arrow)[0]),
             ['backward', 'backward-double'].includes(edge.arrow),
           ),
           ...(doubleArrow(edge.arrow)
             ? [
                 arrowPolygon(
-                  arrowAt(edge.arrowAt2 ?? 0.65),
+                  arrowAt(edge.arrowAt2 ?? arrowPositions(edge.line, edge.arrow)[1]),
                   ['both', 'backward-double'].includes(edge.arrow),
                 ),
               ]
@@ -162,7 +171,7 @@ export function edgeGeometry(from, to, edge) {
     momentumPoint.point,
     scale(
       normal(momentumPoint.tangent),
-      (edge.momentumPosition === 'left' ? -1 : 1) * (edge.momentumDistance ?? 32),
+      (edge.momentumPosition === 'left' ? -1 : 1) * momentumDistance(edge),
     ),
   )
   const momentumDirection = momentumPoint.tangent
@@ -424,8 +433,8 @@ export function crossingPlan(document) {
     const padding = ['photon', 'charged-boson', 'gluon', 'graviton'].includes(upper.line)
       ? 7
       : ['double'].includes(upper.line)
-        ? 3
-        : upper.width / 2
+        ? lineWidth(upper) + 0.3 / TEX_POINTS_PER_UNIT
+        : lineWidth(upper) / 2
     const list = cuts.get(under) || []
     list.push(...crossing.points.map((point) => ({point, radius: gapSize / 2 + padding})))
     cuts.set(under, list)
@@ -433,16 +442,48 @@ export function crossingPlan(document) {
   return {crossings, cuts, geometries}
 }
 
-export function arrowPolygon({point, tangent}, reverse = false, size = 7) {
-  const d = scale(tangent, reverse ? -1 : 1),
-    n = normal(d)
+// TikZ-Feynman's native 45-degree triangle with 1.5pt inner sep and -0.5mm xshift.
+export function arrowPolygon({point, tangent}, reverse = false) {
+  const size = 1.5 / TEX_POINTS_PER_UNIT,
+    d = scale(tangent, reverse ? -1 : 1),
+    n = normal(d),
+    origin = add(point, scale(tangent, -4)),
+    apex = (1 + 1 / Math.tan(Math.PI / 8)) * size,
+    halfBase = (1 + 2 * Math.tan(Math.PI / 8)) * size
   return [
-    add(point, scale(d, size)),
-    add(add(point, scale(d, -size * 0.65)), scale(n, size * 0.55)),
-    add(add(point, scale(d, -size * 0.65)), scale(n, -size * 0.55)),
+    add(origin, scale(d, apex)),
+    add(origin, add(scale(d, -size), scale(n, halfBase))),
+    add(origin, add(scale(d, -size), scale(n, -halfBase))),
   ]
     .map((p) => p.map(fmt).join(','))
     .join(' ')
+}
+
+export function momentumArrow({point, tangent}) {
+  const w = DEFAULT_STROKE,
+    length = 4.8 / TEX_POINTS_PER_UNIT,
+    width = 0.75 * length,
+    inset = 0.325 * length,
+    frontMiter = 0.5 * w * Math.hypot((2 * length) / width, 1),
+    frontAngle = Math.atan2(width / 2, length),
+    backAngle = Math.atan2(width / 2, inset),
+    miter = (0.5 * w) / Math.tan((backAngle - frontAngle) / 2),
+    backX = miter * Math.cos((backAngle + frontAngle) / 2),
+    halfHeight = width / 2 - miter * Math.sin((backAngle + frontAngle) / 2),
+    notch = inset + 0.5 * w * Math.hypot((2 * inset) / width, 1),
+    p = (x, y = 0) =>
+      add(point, add(scale(tangent, x - length), scale(normal(tangent), y)))
+  return {
+    points: [
+      p(length - frontMiter),
+      p(backX, halfHeight),
+      p(notch),
+      p(backX, -halfHeight),
+    ]
+      .map((p) => p.map(fmt).join(','))
+      .join(' '),
+    lineEnd: p(notch - 0.25 * w),
+  }
 }
 
 export function bounds(document, padding = 70) {

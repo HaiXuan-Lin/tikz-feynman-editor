@@ -64,8 +64,8 @@ export const propagators = [
     id: 'ghost',
     name: 'Ghost',
     symbol: 'c',
-    description: '有向点线',
-    arrow: 'forward',
+    description: '点线',
+    arrow: 'none',
     tex: 'ghost',
   },
   {

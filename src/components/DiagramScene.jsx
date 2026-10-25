@@ -1,5 +1,5 @@
 import {useI18n} from './I18n'
-import {h} from 'preact'
+import {h, Fragment} from 'preact'
 import {useId, useState, useMemo} from 'preact/hooks'
 import {selected} from '../core/model.mjs'
 import {
@@ -7,10 +7,18 @@ import {
   add,
   scale,
   normal,
-  arrowPolygon,
+  momentumArrow,
   crossingPlan,
 } from '../core/geometry.mjs'
 import MathLabel from './MathLabel'
+import {
+  ink,
+  vertexRadius,
+  lineWidth,
+  lineDash,
+  DEFAULT_STROKE,
+  TEX_POINTS_PER_UNIT,
+} from '../core/styles.mjs'
 
 export function EdgeShape({
   from,
@@ -25,6 +33,8 @@ export function EdgeShape({
   const maskId = `edge-mask-${useId()}`
   const [labelSize, setLabelSize] = useState({width: 40, height: 18})
   const geometry = edgeGeometry(from, to, edge)
+  const color = ink(edge.color),
+    width = lineWidth(edge)
   const inline = !preview && edge.value && edge.labelPosition === 'center'
   const masked = cuts.length > 0 || inline
   const xs = geometry.samples.map((s) => s.point[0]),
@@ -36,13 +46,13 @@ export function EdgeShape({
       width: Math.max(...xs) - Math.min(...xs) + padding * 2,
       height: Math.max(...ys) - Math.min(...ys) + padding * 2,
     }
-  const dash = ['scalar', 'charged-scalar'].includes(edge.line)
-    ? '7 5'
-    : edge.line === 'ghost'
-      ? '1 5'
-      : undefined
+  const dash = lineDash(edge)?.join(' ')
   const momentumFrom = add(geometry.momentum, scale(geometry.momentumDirection, -22))
   const momentumTo = add(geometry.momentum, scale(geometry.momentumDirection, 22))
+  const momentumHead = momentumArrow({
+    point: momentumTo,
+    tangent: geometry.momentumDirection,
+  })
   const insertionNormal = normal(geometry.insertion.tangent)
   return (
     <g
@@ -102,15 +112,15 @@ export function EdgeShape({
           <path
             d={path}
             fill="none"
-            stroke={edge.color}
-            stroke-width={edge.width}
+            stroke={color}
+            stroke-width={width}
             stroke-dasharray={dash}
-            stroke-linecap="round"
+            stroke-linecap="butt"
             pointer-events="none"
           />
         ))}
         {geometry.arrows.map((points) => (
-          <polygon points={points} fill={edge.color} pointer-events="none" />
+          <polygon points={points} fill={color} pointer-events="none" />
         ))}
         {edge.insertion && (
           <path
@@ -122,11 +132,11 @@ export function EdgeShape({
             ]
               .map(
                 ([a, b], i) =>
-                  `${i % 2 ? 'L' : 'M'}${add(geometry.insertion.point, add(scale(insertionNormal, a * 5), scale(geometry.insertion.tangent, b * 5))).join(',')}`,
+                  `${i % 2 ? 'L' : 'M'}${add(geometry.insertion.point, add(scale(insertionNormal, a * (3 / TEX_POINTS_PER_UNIT)), scale(geometry.insertion.tangent, b * (3 / TEX_POINTS_PER_UNIT)))).join(',')}`,
               )
               .join(' ')}
-            stroke={edge.color}
-            stroke-width={edge.width + 0.5}
+            stroke={color}
+            stroke-width={edge.width ?? DEFAULT_STROKE}
             pointer-events="none"
           />
         )}
@@ -136,7 +146,7 @@ export function EdgeShape({
           value={edge.value}
           x={geometry.label[0]}
           y={geometry.label[1]}
-          color={edge.color}
+          color={color}
           size={17}
           onMeasure={setLabelSize}
         />
@@ -144,23 +154,22 @@ export function EdgeShape({
       {!preview && edge.momentum && (
         <g class="momentum-mark" data-side={edge.momentumPosition} pointer-events="none">
           <path
-            d={`M${momentumFrom.join(',')}L${momentumTo.join(',')}`}
-            stroke={edge.color}
-            stroke-width="1"
+            d={`M${momentumFrom.join(',')}L${momentumHead.lineEnd.join(',')}`}
+            stroke={color}
+            stroke-width={DEFAULT_STROKE}
           />
           <polygon
-            points={arrowPolygon(
-              {point: momentumTo, tangent: geometry.momentumDirection},
-              false,
-              4,
-            )}
-            fill={edge.color}
+            points={momentumHead.points}
+            fill={color}
+            stroke={color}
+            stroke-width={DEFAULT_STROKE}
+            stroke-linejoin="miter"
           />
           <MathLabel
             value={edge.momentum}
             x={geometry.momentumLabel[0]}
             y={geometry.momentumLabel[1]}
-            color={edge.color}
+            color={color}
             size={15}
           />
         </g>
@@ -169,26 +178,59 @@ export function EdgeShape({
   )
 }
 
-export function VertexShape({vertex, color, size = 5}) {
+export function VertexShape({vertex, color, size = null}) {
+  const patternId = 'vertex-pattern-' + useId()
+  color = ink(color)
   if (vertex === 'none') return null
+  const radius = vertexRadius({vertex, size})
+  const stroke = {stroke: color, 'stroke-width': DEFAULT_STROKE}
   if (vertex === 'square_dot')
-    return <rect x={-size} y={-size} width={size * 2} height={size * 2} fill={color} />
-  if (vertex === 'crossed_dot')
     return (
-      <g stroke={color} stroke-width="1.8">
-        <circle r={size + 2} fill="white" />
-        <path
-          d={`M${-size},${-size}L${size},${size}M${-size},${size}L${size},${-size}`}
-        />
+      <rect
+        x={-radius}
+        y={-radius}
+        width={2 * radius}
+        height={2 * radius}
+        fill={color}
+        {...stroke}
+      />
+    )
+  if (vertex === 'crossed_dot') {
+    const d = radius / Math.SQRT2
+    return (
+      <g {...stroke}>
+        <circle r={radius} fill="none" />
+        <path d={'M' + [-d, -d] + 'L' + [d, d] + 'M' + [-d, d] + 'L' + [d, -d]} />
       </g>
     )
+  }
   return (
-    <circle
-      r={vertex === 'blob' ? size * 2.7 : size}
-      fill={['empty_dot', 'blob'].includes(vertex) ? 'white' : color}
-      stroke={color}
-      stroke-width={vertex === 'blob' ? 1.8 : 1.5}
-    />
+    <>
+      {vertex === 'blob' && (
+        <defs>
+          <pattern
+            id={patternId}
+            patternUnits="userSpaceOnUse"
+            width="8.435"
+            height="8.435"
+            patternTransform="rotate(-45)"
+          >
+            <path d="M0,0L0,8.435" {...stroke} />
+          </pattern>
+        </defs>
+      )}
+      <circle
+        r={radius}
+        fill={
+          vertex === 'blob'
+            ? 'url(#' + patternId + ')'
+            : vertex === 'empty_dot'
+              ? 'none'
+              : color
+        }
+        {...stroke}
+      />
+    </>
   )
 }
 
@@ -236,7 +278,7 @@ export default function DiagramScene({
           {selected(selection, 'node', n.id) && (
             <circle
               class="selection-halo"
-              r={n.vertex === 'blob' ? n.size * 2.7 + 6 : 15}
+              r={Math.max(15, vertexRadius(n) + 6)}
               fill="#819cd0"
               opacity=".18"
               stroke="#5674bd"
@@ -245,12 +287,12 @@ export default function DiagramScene({
           {!preview && n.vertex === 'none' && !n.value && (
             <circle class="node-handle" r="3" fill="#b8bec9" />
           )}
-          <VertexShape vertex={n.vertex} color={n.color} size={n.size} />
+          <VertexShape vertex={n.vertex} color={ink(n.color)} size={n.size} />
           {!preview && (
             <MathLabel
               value={n.value}
-              y={n.vertex === 'none' ? 0 : -(n.vertex === 'blob' ? 34 : 24)}
-              color={n.color}
+              y={n.vertex === 'none' ? 0 : -(vertexRadius(n) + 20)}
+              color={ink(n.color)}
             />
           )}
         </g>
@@ -286,7 +328,7 @@ export default function DiagramScene({
                 opacity=".15"
               />
             )}
-            <MathLabel value={a.value} size={a.size} color={a.color} />
+            <MathLabel value={a.value} size={a.size} color={ink(a.color)} />
           </g>
         ))}
     </g>

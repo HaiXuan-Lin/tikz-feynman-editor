@@ -94,15 +94,11 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
                   aria-label={t('添加{0}', v.name)}
                   onClick={() => onVertex(v.id)}
                 >
-                  <svg viewBox="-20 -20 40 40">
+                  <svg viewBox={v.id === 'blob' ? '-40 -40 80 80' : '-20 -20 40 40'}>
                     {v.id === 'none' ? (
                       <circle r="4" stroke="currentColor" fill="none" />
                     ) : (
-                      <VertexShape
-                        vertex={v.id}
-                        color="#282a30"
-                        size={v.id === 'blob' ? 4 : 6}
-                      />
+                      <VertexShape vertex={v.id} color={null} size={null} />
                     )}
                   </svg>
                   <span>{t(v.name)}</span>

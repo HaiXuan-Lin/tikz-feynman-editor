@@ -1,5 +1,7 @@
 // UI copy is kept separate from user-authored TeX labels and project titles.
 export const messages = {
+  点线: 'Dotted line',
+  'TikZ-Feynman default': 'TikZ-Feynman default',
   '复制失败，请从导出面板手动复制。':
     'Copy failed. Please copy the export text manually.',
   '已插入{0}': 'Inserted {0}',
@@ -228,6 +230,7 @@ export const messages = {
 }
 // English source strings used by the newer controls.
 const chinese = {
+  'TikZ-Feynman default': 'TikZ-Feynman 默认',
   'Snap H/V': '水平／垂直吸附',
   'Arrow position': '箭头位置',
   'Arrow 1 position': '箭头 1 位置',

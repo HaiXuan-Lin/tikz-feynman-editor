@@ -2,6 +2,13 @@ import {useI18n} from './I18n'
 import {h, Fragment} from 'preact'
 import {useEffect, useState} from 'preact/hooks'
 import {propagators, vertices, colors, lineStyle, doubleArrow} from '../core/catalog.mjs'
+import {
+  TEX_POINTS_PER_UNIT,
+  lineWidth,
+  vertexRadius,
+  momentumDistance,
+  arrowPositions,
+} from '../core/styles.mjs'
 import {selected} from '../core/model.mjs'
 import {crossingPlan} from '../core/geometry.mjs'
 import Icon from './Icon'
@@ -18,12 +25,13 @@ function Field({label, children, hint}) {
     </div>
   )
 }
-function NumberField({label, value, onChange, min, max, step = 1}) {
+function NumberField({label, value, onChange, min, max, step = 1, placeholder}) {
   return (
     <Field label={label}>
       <input
         aria-label={label}
         type="number"
+        placeholder={placeholder}
         value={value}
         min={min}
         max={max}
@@ -35,6 +43,31 @@ function NumberField({label, value, onChange, min, max, step = 1}) {
         }}
       />
     </Field>
+  )
+}
+function InheritedNumberField({label, value, fallback, onChange, min, max, step = 0.1}) {
+  const t = useI18n()
+  return (
+    <div class="inherited-number-field">
+      <label class="check-field">
+        <input
+          type="checkbox"
+          aria-label={label + ' · ' + t('TikZ-Feynman default')}
+          checked={value == null}
+          onChange={(e) => onChange(e.currentTarget.checked ? null : fallback)}
+        />
+        {t('TikZ-Feynman default')}
+      </label>
+      <NumberField
+        label={label}
+        value={value == null ? '' : value}
+        placeholder={String(Number(fallback.toFixed(3)))}
+        min={min}
+        max={max}
+        step={step}
+        onChange={onChange}
+      />
+    </div>
   )
 }
 function PercentageField({label, value, onChange, min = 1, max = 99, hint}) {
@@ -169,23 +202,29 @@ export default function Inspector({
         {single && e && (
           <>
             <Field label={t('传播子类型')}>
-              <select
-                aria-label={t('传播子类型')}
-                value={e.line}
-                onChange={(ev) =>
-                  update({
-                    line: ev.currentTarget.value,
-                    arrow: lineStyle(ev.currentTarget.value).arrow,
-                    arrowAt: doubleArrow(lineStyle(ev.currentTarget.value).arrow)
-                      ? 0.35
-                      : 0.5,
-                  })
-                }
-              >
+              <div class="propagator-picker">
                 {propagators.map((p) => (
-                  <option value={p.id}>{t(p.name)}</option>
+                  <button
+                    type="button"
+                    data-line={p.id}
+                    class={e.line === p.id ? 'active' : ''}
+                    aria-pressed={e.line === p.id}
+                    aria-label={t(p.name)}
+                    title={t(p.description)}
+                    onClick={() =>
+                      update({
+                        line: p.id,
+                        arrow: p.arrow,
+                        arrowAt: arrowPositions(p.id, p.arrow)[0],
+                        arrowAt2: arrowPositions(p.id, p.arrow)[1],
+                      })
+                    }
+                  >
+                    <LinePreview line={p.id} />
+                    <span>{t(p.name)}</span>
+                  </button>
                 ))}
-              </select>
+              </div>
             </Field>
             <Field label={t('箭头方向')}>
               <div class="segmented arrow-directions">
@@ -370,13 +409,15 @@ export default function Inspector({
                 onInput={(ev) => update({momentumAt: Number(ev.currentTarget.value)})}
               />
             </Field>
-            <NumberField
-              label={t('Momentum distance')}
-              value={e.momentumDistance}
-              min={15}
-              max={100}
-              onChange={(value) => update({momentumDistance: value})}
+            <InheritedNumberField
+              label={t('Momentum distance') + ' (mm)'}
+              value={e.momentumDistance == null ? null : e.momentumDistance / 8}
+              fallback={momentumDistance({...e, momentumDistance: null}) / 8}
+              min={0}
+              max={12.5}
+              onChange={(v) => update({momentumDistance: v == null ? null : v * 8})}
             />
+
             <label class="check-field">
               <input
                 type="checkbox"
@@ -471,13 +512,19 @@ export default function Inspector({
                 onChange={(v) => update({position: [n.position[0], v]})}
               />
             </div>
-            <NumberField
-              label={t('顶点大小')}
-              value={n.size}
-              min={2}
-              max={24}
-              onChange={(v) => update({size: v})}
+            <InheritedNumberField
+              label={t('顶点大小') + ' (mm)'}
+              value={n.size == null ? null : vertexRadius(n) / 4}
+              fallback={vertexRadius({...n, size: null}) / 4}
+              min={0.1}
+              max={30}
+              onChange={(v) =>
+                update({
+                  size: v == null ? null : (v * 4) / (n.vertex === 'blob' ? 2.7 : 1),
+                })
+              }
             />
+
             {n.attachment && (
               <div class="attachment-status">
                 <span>{t('Attached to propagator')}</span>
@@ -501,6 +548,9 @@ export default function Inspector({
         )}
         <div class="section-label">{t('外观')}</div>
         <Field label={t('颜色')}>
+          <button class="secondary-button" onClick={() => update({color: null})}>
+            {t('TikZ-Feynman default')}
+          </button>
           <div class="color-swatches">
             {colors.map((c) => (
               <button
@@ -513,13 +563,18 @@ export default function Inspector({
           </div>
         </Field>
         {e && (
-          <NumberField
-            label={t('线宽')}
-            value={e?.width || 1.8}
-            min={0.5}
+          <InheritedNumberField
+            label={t('线宽') + ' (pt)'}
+            value={
+              e.width == null ? null : Number((e.width * TEX_POINTS_PER_UNIT).toFixed(3))
+            }
+            fallback={Number(
+              (lineWidth({...e, width: null}) * TEX_POINTS_PER_UNIT).toFixed(3),
+            )}
+            min={0.1}
             max={6}
-            step={0.2}
-            onChange={(v) => update({width: v})}
+            step={0.05}
+            onChange={(v) => update({width: v == null ? null : v / TEX_POINTS_PER_UNIT})}
           />
         )}
         {!single && (

@@ -158,9 +158,9 @@ test('all arrow styles use their independent percentages and chosen directions',
       const points = polygon.split(' ').map((p) => p.split(',').map(Number))
       const tip = points[0][0],
         base = (points[1][0] + points[2][0]) / 2
-      const center = (tip * 0.65 + base) / 1.65
+      const center = base + 4 + (directions[i] * 1.5) / (72.27 / 2.54 / 80)
       assert.equal(Math.sign(tip - base), directions[i])
-      assert.ok(Math.abs(center - (5 + (i ? 0.8 : 0.2) * 190)) < 0.01)
+      assert.ok(Math.abs(center - (6 + (i ? 0.8 : 0.2) * 188)) < 0.01)
     })
   }
   const majorana = edge(a.id, b.id, 'majorana', {arrow: 'backward', arrowAt: 0.7})
@@ -186,7 +186,7 @@ test('new curve and arrow settings round-trip, migrate, duplicate and export', (
   assert.equal(copied.arrowAt, 0.22)
   assert.equal(copied.arrowAt2, 0.77)
   const tex = toTeX(doc)
-  assert.equal((tex.match(/\\fill\[black\]/g) || []).length, 2)
+  assert.equal(tex.split('/tikzfeynman/with arrow=').length - 1, 2)
   assert.ok(!tex.includes('\\diagram*'))
   delete doc.edges[0].curve
   delete doc.edges[0].ellipseRatio
@@ -298,7 +298,7 @@ test('LaTeX exports actual clipped geometry and inline math labels', () => {
   assert.match(tex, /edgeLabel0.south west/)
   assert.match(tex, /\$p_1\$/)
   assert.match(tex, /\$k\$/)
-  assert.match(tex, /\\vertex\[dot, minimum size=10pt\] \(v0\) at \(-1\.25, 0\) \{\};/)
+  assert.match(tex, /\\vertex\[dot\] \(v0\) at \(-1\.25, 0\) \{\};/)
   assert.ok(tex.indexOf('\\vertex[dot') > tex.lastIndexOf('\\end{scope}'))
   assert.ok(!/undefined|NaN/.test(tex))
 })

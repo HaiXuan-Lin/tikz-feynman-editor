@@ -30,3 +30,11 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:8000` in a browser. Web development requires `Node.js ≥ 22.12` and `npm`. Command `npm test` runs the tests; `npm run dist` produces a standalone web app.
+
+## Native TikZ-Feynman appearance
+
+New vertices and propagators inherit the package defaults. LaTeX export omits line width, vertex size, color, fill and pattern overrides until you explicitly customize them. Blob vertices retain the native hatch pattern. The inspector provides a **TikZ-Feynman default** option to restore inheritance; numeric hints are shown in pt for line width and mm for vertex size and momentum distance.
+
+Older projects migrate the editor's former default sizes, widths and colors to inheritance. Other saved custom values are preserved. Saved projects record this distinction so an explicit custom value remains custom after reopening.
+
+Select a propagator and click an SVG preview under **Propagator type** to change its type. Self-loops export as closed vector curves with native arrow and insertion styles, preserving their direction, radius and ellipse ratio.

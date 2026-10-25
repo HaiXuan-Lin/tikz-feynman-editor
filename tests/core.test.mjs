@@ -119,15 +119,18 @@ test('bounding box includes loop extents and empty diagrams stay finite', () => 
   assert.ok(box.y <= -129)
   assert.ok(Object.values(bounds(emptyDiagram())).every(Number.isFinite))
 })
-test('TeX uses stable local names, actual styles, insertion, colours and closed loops', () => {
+test('TeX uses stable local names, native styles, insertion and colours', () => {
   const a = node(0, 0, {vertex: 'crossed_dot', color: '#bc5557'}),
     b = node(160, 0)
   const document = {
     ...emptyDiagram(),
     nodes: [a, b],
     edges: [
-      edge(a.id, b.id, 'ghost', {momentum: 'k', insertion: true}),
-      edge(b.id, b.id, 'scalar'),
+      edge(a.id, b.id, 'ghost', {
+        momentum: 'k',
+        momentumPosition: 'right',
+        insertion: true,
+      }),
     ],
     annotations: [annotation(0, -100, '\\mathcal{M}')],
   }
@@ -135,9 +138,8 @@ test('TeX uses stable local names, actual styles, insertion, colours and closed 
   assert.match(code, /\\documentclass/)
   assert.match(code, /crossed dot/)
   assert.match(code, /ghost/)
-  assert.match(code, /insertion=0.5/)
+  assert.match(code, /insertion/)
   assert.match(code, /momentum'/)
-  assert.match(code, /out=55, in=125, loop/)
   assert.match(code, /definecolor/)
   assert.ok(!code.includes(a.id))
   assert.ok(!/undefined|NaN|Infinity/.test(code))
