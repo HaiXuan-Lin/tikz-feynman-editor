@@ -72,16 +72,18 @@ test('axis snapping attaches at an exact horizontal or vertical intersection', (
   assert.ok(Math.abs(disabled.point[0] - 40) > 0.5)
 })
 
-test('axis snapping works on Bézier curves, rotated ellipse arcs and elliptical loops', () => {
+test('axis snapping works on Bézier curves, ellipse arcs, circles and TikZ loops', () => {
   const a = node(-100, 20),
     b = node(130, 90)
   for (const props of [
     {bend: 70},
     {curve: 'ellipse', ellipseRatio: 0.45},
     {curve: 'ellipse', ellipseRatio: 1.8, bend: -30},
-    {curve: 'ellipse', ellipseRatio: 1.7, loopDirection: 'right'},
+    {curve: 'ellipse', ellipseRatio: 1.7, loopAngle: 0},
+    {curve: 'bezier', loopAngle: 37.5, loopSpread: 55},
+    {curve: 'bezier', loopAngle: -120, loopClockwise: false},
   ]) {
-    const loop = props.loopDirection !== undefined
+    const loop = props.loopAngle !== undefined
     const parent = edge(a.id, loop ? a.id : b.id, 'plain', props)
     const curve = edgeCurve(a, loop ? a : b, parent)
     const point = curve(0.36).point

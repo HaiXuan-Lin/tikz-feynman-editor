@@ -1,5 +1,5 @@
 import {lineStyle, doubleArrow} from './catalog.mjs'
-import {crossingPlan, bounds, add, scale} from './geometry.mjs'
+import {crossingPlan, bounds, add, scale, loopControls} from './geometry.mjs'
 import {parseDiagram} from './model.mjs'
 import {TEX_POINTS_PER_UNIT, vertexRadius, arrowPositions} from './styles.mjs'
 
@@ -66,15 +66,14 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
     return lineStyle(e.line).tex
   }
   const plan = crossingPlan(document)
-  // Native graph syntax drops self-edges. Explicit closed paths preserve all
-  // self-loop directions, sizes and ellipse ratios without graph-layout tricks.
+  // Exact sampled paths keep clipping, attached vertices, circular loops and
+  // inline labels aligned; other diagrams keep semantic TikZ-Feynman commands.
   const exact =
     plan.cuts.size > 0 ||
     document.nodes.some((n) => n.attachment) ||
     document.edges.some((e) => {
       const positions = arrowPositions(e.line, e.arrow)
       return (
-        e.from === e.to ||
         e.labelPosition === 'center' ||
         e.curve === 'ellipse' ||
         (e.momentum && (e.momentumAt !== 0.5 || e.momentumDistance != null)) ||
@@ -87,8 +86,15 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
       )
     })
   let renderedEdges
+  // TikZ-Feynman never draws an edge from a vertex to itself inside diagram*,
+  // so loops are separate edges from the vertex centre. Explicit out/in/distance
+  // reproduce the canvas curve; TikZ's `loop` key would reset the distance and
+  // add its default arrow tip.
+  const loops = [],
+    positions = new Map(document.nodes.map((n) => [n.id, n.position])),
+    angle = (value) => number(((value % 360) + 360) % 360)
   if (!exact) {
-    const edges = document.edges.map((e) => {
+    const edges = document.edges.flatMap((e) => {
       const options = [edgeType(e), ...widthOption(e), ...colorOption(e)]
       if (
         ![
@@ -106,7 +112,7 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
             'arrow=' +
             number(e.arrowAt),
         )
-      if (e.bend)
+      if (e.bend && e.from !== e.to)
         options.push(
           'bend ' + (e.bend > 0 ? 'left' : 'right') + '=' + Math.abs(e.bend) / 2,
         )
@@ -130,6 +136,17 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
             '$}',
         )
       if (e.insertion) options.push('insertion=0.5')
+      if (e.from === e.to) {
+        const loop = loopControls(e),
+          at = point(positions.get(e.from))
+        options.push(
+          'out=' + angle(loop.out),
+          'in=' + angle(loop.in),
+          'distance=' + number(loop.distance / 80) + 'cm',
+        )
+        loops.push(command('path', [], at + ' edge [' + options.join(', ') + '] ' + at))
+        return []
+      }
       return (
         '    (' +
         names.get(e.from) +
@@ -140,7 +157,7 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
         ')'
       )
     })
-    renderedEdges = ['  \\diagram* {', edges.join(',\n'), '  };']
+    renderedEdges = edges.length ? ['  \\diagram* {', edges.join(',\n'), '  };'] : []
   } else {
     const box = bounds(document, 200),
       outer =
@@ -253,7 +270,8 @@ export function toTeX(document, {standalone = false, shareURL = ''} = {}) {
     ...definitions,
     '\\begin{tikzpicture}',
     '\\begin{feynman}',
-    ...(exact ? [] : nodes),
+    // Vertices follow loops so that marked vertices cover loop ends, as on screen.
+    ...(exact ? [] : [...loops, ...nodes]),
     ...renderedEdges,
     ...(exact ? nodes : []),
     ...annotations,

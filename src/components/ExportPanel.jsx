@@ -7,10 +7,16 @@ import {shareURL, encode} from '../core/share'
 import {copyText, download, svgDocument} from '../core/files'
 import Icon from './Icon'
 
-export default function ExportPanel({document: diagram, sceneRef, onClose, notify}) {
+export default function ExportPanel({
+  document: diagram,
+  sceneRef,
+  onClose,
+  notify,
+  initialTab = 'tex',
+}) {
   const t = useI18n()
 
-  const [tab, setTab] = useState('tex'),
+  const [tab, setTab] = useState(initialTab),
     [standalone, setStandalone] = useState(false),
     [background, setBackground] = useState(true)
   const link = shareURL(diagram)

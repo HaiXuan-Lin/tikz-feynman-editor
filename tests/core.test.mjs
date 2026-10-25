@@ -103,20 +103,21 @@ test('straight, curved, parallel and self-loop propagators have finite visible g
         ),
       )
     }
-  for (const direction of ['top', 'right', 'bottom', 'left']) {
+  for (const loopAngle of [90, 0, -90, 180, 37.5]) {
     const geometry = edgeGeometry(
       from,
       from,
-      edge(from.id, from.id, 'photon', {loopDirection: direction}),
+      edge(from.id, from.id, 'photon', {loopAngle}),
     )
-    assert.ok(geometry.arc > 300)
+    assert.ok(geometry.arc > 250)
     assert.ok(geometry.paths[0].length > 100)
   }
 })
 test('bounding box includes loop extents and empty diagrams stay finite', () => {
   const document = getTemplate('tadpole').create(),
-    box = bounds(document, 0)
-  assert.ok(box.y <= -129)
+    box = bounds(document, 0),
+    loop = document.edges.find((e) => e.from === e.to)
+  assert.ok(box.y <= -2 * loop.loopSize + 0.5)
   assert.ok(Object.values(bounds(emptyDiagram())).every(Number.isFinite))
 })
 test('TeX uses stable local names, native styles, insertion and colours', () => {

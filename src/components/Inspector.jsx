@@ -10,7 +10,7 @@ import {
   arrowPositions,
 } from '../core/styles.mjs'
 import {selected} from '../core/model.mjs'
-import {crossingPlan} from '../core/geometry.mjs'
+import {crossingPlan, normalizeAngle} from '../core/geometry.mjs'
 import Icon from './Icon'
 import {LinePreview} from './Library'
 
@@ -115,6 +115,158 @@ function PercentageField({label, value, onChange, min = 1, max = 99, hint}) {
     </Field>
   )
 }
+const directions = [
+  [135, '↖'],
+  [90, '↑'],
+  [45, '↗'],
+  [180, '←'],
+  null,
+  [0, '→'],
+  [-135, '↙'],
+  [-90, '↓'],
+  [-45, '↘'],
+]
+function LoopControls({edge: e, update, onAutoLoop}) {
+  const t = useI18n()
+  const angle = Math.round(e.loopAngle)
+  const [draft, setDraft] = useState(String(angle))
+  useEffect(() => setDraft(String(angle)), [angle])
+  const commitDraft = (ev) => {
+    const value = Number(ev.currentTarget.value)
+    if (ev.currentTarget.value.trim() && Number.isFinite(value))
+      update({loopAngle: normalizeAngle(value)})
+    else setDraft(String(angle))
+  }
+  return (
+    <>
+      <div class="section-label">{t('Self-loop')}</div>
+      <Field label={t('Loop direction')} hint={t('0° = right · 90° = up')}>
+        <div class="loop-direction">
+          <div class="direction-pad" role="group" aria-label={t('Loop direction')}>
+            {directions.map((d) =>
+              d ? (
+                <button
+                  type="button"
+                  class={
+                    Math.abs(normalizeAngle(e.loopAngle - d[0])) < 0.5 ? 'active' : ''
+                  }
+                  aria-label={`${d[0]}°`}
+                  onClick={() => update({loopAngle: d[0]})}
+                >
+                  {d[1]}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  class="auto"
+                  title={t('Point into the widest free gap')}
+                  onClick={onAutoLoop}
+                >
+                  {t('Auto')}
+                </button>
+              ),
+            )}
+          </div>
+          <div class="angle-control">
+            <input
+              type="range"
+              aria-label={t('Loop direction')}
+              min="-180"
+              max="180"
+              step="1"
+              value={angle}
+              onInput={(ev) =>
+                update({loopAngle: normalizeAngle(Number(ev.currentTarget.value))})
+              }
+            />
+            <label class="angle-number">
+              <input
+                aria-label={`${t('Loop direction')} (°)`}
+                type="number"
+                step="1"
+                value={draft}
+                onInput={(ev) => setDraft(ev.currentTarget.value)}
+                onBlur={commitDraft}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter') ev.currentTarget.blur()
+                }}
+              />
+              <span>°</span>
+            </label>
+          </div>
+        </div>
+      </Field>
+      <Field label={t('Orientation')}>
+        <div class="segmented">
+          <button
+            class={e.loopClockwise ? 'active' : ''}
+            onClick={() => !e.loopClockwise && update({loopClockwise: true})}
+          >
+            ↻ {t('Clockwise')}
+          </button>
+          <button
+            class={e.loopClockwise ? '' : 'active'}
+            onClick={() => e.loopClockwise && update({loopClockwise: false})}
+          >
+            ↺ {t('Counter-clockwise')}
+          </button>
+        </div>
+      </Field>
+      <Field label={t('Loop shape')}>
+        <div class="segmented">
+          <button
+            class={e.curve === 'ellipse' ? 'active' : ''}
+            onClick={() => update({curve: 'ellipse'})}
+          >
+            {t('Circle')}
+          </button>
+          <button
+            class={e.curve === 'ellipse' ? '' : 'active'}
+            onClick={() => update({curve: 'bezier'})}
+          >
+            {t('TikZ loop')}
+          </button>
+        </div>
+      </Field>
+      <Field label={t('Loop size')} hint={`${e.loopSize}`}>
+        <input
+          type="range"
+          aria-label={t('Loop size')}
+          min="25"
+          max="200"
+          step="1"
+          value={e.loopSize}
+          onInput={(ev) => update({loopSize: Number(ev.currentTarget.value)})}
+        />
+      </Field>
+      {e.curve === 'ellipse' ? (
+        <PercentageField
+          label={t('Ellipse ratio')}
+          hint={t('100% = circle')}
+          value={e.ellipseRatio}
+          min={10}
+          max={300}
+          onChange={(value) => update({ellipseRatio: value})}
+        />
+      ) : (
+        <Field label={t('Opening')} hint={`±${e.loopSpread}°`}>
+          <input
+            type="range"
+            aria-label={t('Opening')}
+            min="15"
+            max="75"
+            step="1"
+            value={e.loopSpread}
+            onInput={(ev) => update({loopSpread: Number(ev.currentTarget.value)})}
+          />
+        </Field>
+      )}
+      <p class="fine-print">
+        {t('Drag the round handle on the canvas to turn the loop.')}
+      </p>
+    </>
+  )
+}
 export default function Inspector({
   document,
   selection,
@@ -123,6 +275,7 @@ export default function Inspector({
   onDuplicate,
   onLoop,
   onReverse,
+  onAutoLoop,
   onLayer,
   onCrossing,
 }) {
@@ -141,37 +294,9 @@ export default function Inspector({
         : t('文字标注')
     : t('{0} 个图形', selection.length)
   const update = (props) => onUpdate(props)
+  // Like quiver's side panel, the inspector slides away when nothing is selected.
   if (!selection.length)
-    return (
-      <aside class="panel inspector-panel empty-inspector" aria-label={t('属性面板')}>
-        <div class="panel-heading">
-          <span>{t('图形属性')}</span>
-        </div>
-        <div class="inspector-placeholder">
-          <Icon name="select" size={26} />
-          <h3>{t('选择一个图形')}</h3>
-          <p>{t('点击顶点或传播子，编辑标签、线型与几何属性。')}</p>
-          <div class="shortcut-hints">
-            <span>
-              {t('多选')}
-              <kbd>Shift</kbd>
-            </span>
-            <span>
-              {t('框选')}
-              <kbd>{t('拖动画布')}</kbd>
-            </span>
-            <span>
-              {t('添加顶点')}
-              <kbd>{t('双击')}</kbd>
-            </span>
-            <span>
-              {t('平移')}
-              <kbd>{t('Space + 拖动')}</kbd>
-            </span>
-          </div>
-        </div>
-      </aside>
-    )
+    return <aside class="panel inspector-panel hidden" aria-hidden="true" />
   return (
     <aside class="panel inspector-panel" aria-label={t('属性面板')}>
       <div class="panel-heading">
@@ -187,17 +312,6 @@ export default function Inspector({
               {e.from === e.to ? t(' · 自环') : ''}
             </span>
           </div>
-        )}
-        {single && (
-          <Field label={t('数学标签')} hint="TeX">
-            <input
-              id="label-input"
-              aria-label={t('数学标签')}
-              placeholder={a ? '\\mathcal{M} =' : t('例如 e^-, \\gamma, p_1')}
-              value={item.value}
-              onInput={(ev) => update({value: ev.currentTarget.value})}
-            />
-          </Field>
         )}
         {single && e && (
           <>
@@ -270,53 +384,33 @@ export default function Inspector({
                 )}
               </>
             )}
-            <Field label={t('Curve style')}>
-              <select
-                aria-label={t('Curve style')}
-                value={e.curve}
-                onChange={(ev) => update({curve: ev.currentTarget.value})}
-              >
-                <option value="bezier">{t('Bézier')}</option>
-                <option value="ellipse">{t('Ellipse / circle')}</option>
-              </select>
-            </Field>
-            {e.curve === 'ellipse' && (
-              <PercentageField
-                label={t('Ellipse ratio')}
-                hint={t('100% = circle')}
-                value={e.ellipseRatio}
-                min={10}
-                max={300}
-                onChange={(value) => update({ellipseRatio: value})}
-              />
-            )}
             {e.from === e.to ? (
+              <LoopControls edge={e} update={update} onAutoLoop={onAutoLoop} />
+            ) : (
               <>
-                <Field label={t('自环方向')}>
+                <Field label={t('Curve style')}>
                   <select
-                    aria-label={t('自环方向')}
-                    value={e.loopDirection}
-                    onChange={(ev) => update({loopDirection: ev.currentTarget.value})}
+                    aria-label={t('Curve style')}
+                    value={e.curve}
+                    onChange={(ev) => update({curve: ev.currentTarget.value})}
                   >
-                    {[
-                      ['top', t('上')],
-                      ['right', t('右')],
-                      ['bottom', t('下')],
-                      ['left', t('左')],
-                    ].map(([v, l]) => (
-                      <option value={v}>{l}</option>
-                    ))}
+                    <option value="bezier">{t('Bézier')}</option>
+                    <option value="ellipse">{t('Ellipse / circle')}</option>
                   </select>
                 </Field>
-                <NumberField
-                  label={t('自环半径')}
-                  value={e.loopSize}
-                  min={25}
-                  max={200}
-                  onChange={(v) => update({loopSize: v})}
-                />
+                {e.curve === 'ellipse' && (
+                  <PercentageField
+                    label={t('Ellipse ratio')}
+                    hint={t('100% = circle')}
+                    value={e.ellipseRatio}
+                    min={10}
+                    max={300}
+                    onChange={(value) => update({ellipseRatio: value})}
+                  />
+                )}
               </>
-            ) : e.curve === 'ellipse' ? (
+            )}
+            {e.from === e.to ? null : e.curve === 'ellipse' ? (
               <Field label={t('Arc side')}>
                 <div class="segmented">
                   <button

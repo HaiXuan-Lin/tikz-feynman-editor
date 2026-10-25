@@ -1,6 +1,6 @@
 import {GRID, lineStyle, vertices, propagators, arrowStyles} from './catalog.mjs'
 import {arrowPositions, TEX_POINTS_PER_UNIT} from './styles.mjs'
-import {edgeCurve} from './geometry.mjs'
+import {edgeCurve, normalizeAngle} from './geometry.mjs'
 
 let sequence = 0
 export const uid = (prefix) =>
@@ -36,7 +36,8 @@ export const edge = (from, to, line = 'fermion', props = {}) => ({
   value: '',
   momentum: '',
   bend: 0,
-  curve: 'bezier',
+  // Loops default to circles touching their vertex, as in quiver and textbooks.
+  curve: from === to ? 'ellipse' : 'bezier',
   ellipseRatio: 1,
   labelPosition: 'left',
   labelAt: 0.5,
@@ -47,7 +48,9 @@ export const edge = (from, to, line = 'fermion', props = {}) => ({
   gapSize: 12,
   color: null,
   width: null,
-  loopDirection: 'top',
+  loopAngle: 90,
+  loopClockwise: true,
+  loopSpread: 45,
   loopSize: 60,
   insertion: false,
   ...props,
@@ -78,6 +81,13 @@ const position = (value) => {
     throw new Error('顶点坐标无效。')
   return [...value]
 }
+
+const legacyLoopAngles = new Map([
+  ['top', 90],
+  ['right', 0],
+  ['bottom', -90],
+  ['left', 180],
+])
 
 // Version 1 stored grid coordinates and index-based endpoints. Both compressed
 // links and saved JSON enter through this migration and validation boundary.
@@ -139,6 +149,8 @@ export function parseDiagram(input) {
     const id = legacy ? uid('e') : text(e.id)
     if (!id || edgeIds.has(id)) throw new Error('传播子 ID 缺失或重复。')
     edgeIds.add(id)
+    // Loops saved before loopAngle existed were always drawn as circles.
+    const circularLoop = from === to && e.loopAngle == null
     return edge(from, to, line, {
       id,
       arrow:
@@ -174,8 +186,9 @@ export function parseDiagram(input) {
       value: text(e.value),
       momentum: text(e.momentum),
       bend: bounded(e.bend, 0, -90, 90),
-      curve: e.curve === 'ellipse' ? 'ellipse' : 'bezier',
-      ellipseRatio: bounded(e.ellipseRatio, 1, 0.1, 3),
+      curve: circularLoop || e.curve === 'ellipse' ? 'ellipse' : 'bezier',
+      ellipseRatio:
+        circularLoop && e.curve !== 'ellipse' ? 1 : bounded(e.ellipseRatio, 1, 0.1, 3),
       labelPosition: ['left', 'center', 'right'].includes(e.labelPosition)
         ? e.labelPosition
         : 'left',
@@ -187,9 +200,12 @@ export function parseDiagram(input) {
       gapSize: bounded(e.gapSize, 12, 4, 40),
       color: color(e.color),
       width: inherited(e.width, 1.8, 0.1 / TEX_POINTS_PER_UNIT, 6 / TEX_POINTS_PER_UNIT),
-      loopDirection: ['top', 'right', 'bottom', 'left'].includes(e.loopDirection)
-        ? e.loopDirection
-        : 'top',
+      // Earlier projects stored one of four loop directions.
+      loopAngle: normalizeAngle(
+        bounded(e.loopAngle, legacyLoopAngles.get(e.loopDirection) ?? 90, -360, 360),
+      ),
+      loopClockwise: e.loopClockwise !== false,
+      loopSpread: bounded(e.loopSpread, 45, 15, 75),
       loopSize: bounded(e.loopSize, 60, 25, 200),
       insertion: Boolean(e.insertion),
     })

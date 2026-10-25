@@ -20,6 +20,13 @@ import {
   TEX_POINTS_PER_UNIT,
 } from '../core/styles.mjs'
 
+// Like quiver, the centre of a vertex starts a new propagator and the ring
+// around it moves the vertex. Both zones keep a constant on-screen size.
+export function vertexZones(n, zoom = 1) {
+  const core = Math.max(10 / zoom, vertexRadius(n) + 3 / zoom)
+  return {core, hit: core + 13 / zoom}
+}
+
 export function EdgeShape({
   from,
   to,
@@ -27,13 +34,14 @@ export function EdgeShape({
   isSelected = false,
   preview = false,
   cuts = [],
+  tint,
 }) {
   const t = useI18n()
 
   const maskId = `edge-mask-${useId()}`
   const [labelSize, setLabelSize] = useState({width: 40, height: 18})
   const geometry = edgeGeometry(from, to, edge)
-  const color = ink(edge.color),
+  const color = tint || ink(edge.color),
     width = lineWidth(edge)
   const inline = !preview && edge.value && edge.labelPosition === 'center'
   const masked = cuts.length > 0 || inline
@@ -57,8 +65,8 @@ export function EdgeShape({
   return (
     <g
       class="diagram-edge"
-      data-kind="edge"
-      data-id={edge.id}
+      data-kind={preview ? undefined : 'edge'}
+      data-id={preview ? undefined : edge.id}
       role={preview ? undefined : 'button'}
       aria-label={preview ? undefined : t('传播子 {0} {1}', edge.line, edge.value)}
       tabindex={preview ? undefined : -1}
@@ -98,13 +106,14 @@ export function EdgeShape({
         </defs>
       )}
       <g class="propagator-ink" mask={masked ? `url(#${maskId})` : undefined}>
-        {isSelected && (
+        {!preview && (
           <path
-            class="selection-halo"
+            class={isSelected ? 'selection-halo' : 'hover-halo'}
             d={geometry.hitPath}
-            stroke="#819cd0"
-            stroke-width="9"
-            opacity=".22"
+            stroke="#000"
+            stroke-width="14"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             fill="none"
           />
         )}
@@ -239,6 +248,8 @@ export default function DiagramScene({
   selection = [],
   preview = false,
   sceneRef,
+  zoom = 1,
+  tint,
 }) {
   const t = useI18n()
 
@@ -261,6 +272,7 @@ export default function DiagramScene({
               isSelected={selected(selection, 'edge', e.id)}
               preview={preview}
               cuts={plan.cuts.get(e.id) || []}
+              tint={tint}
             />
           ),
       )}
@@ -268,26 +280,26 @@ export default function DiagramScene({
         <g
           key={n.id}
           transform={`translate(${n.position.join(' ')})`}
-          data-kind="node"
-          data-id={n.id}
+          data-kind={preview ? undefined : 'node'}
+          data-id={preview ? undefined : n.id}
           role={preview ? undefined : 'button'}
           aria-label={preview ? undefined : t('顶点 {0}', n.value || n.vertex)}
           tabindex={preview ? undefined : -1}
         >
-          {!preview && <circle class="hit-target" r="19" fill="transparent" />}
+          {!preview && (
+            <circle class="hit-target" r={vertexZones(n, zoom).hit} fill="transparent" />
+          )}
           {selected(selection, 'node', n.id) && (
             <circle
               class="selection-halo"
-              r={Math.max(15, vertexRadius(n) + 6)}
-              fill="#819cd0"
-              opacity=".18"
-              stroke="#5674bd"
+              r={Math.max(14, vertexRadius(n) + 7)}
+              fill="#000"
             />
           )}
           {!preview && n.vertex === 'none' && !n.value && (
-            <circle class="node-handle" r="3" fill="#b8bec9" />
+            <circle class="node-handle" r="3.5" fill="none" stroke="#b3b3b3" />
           )}
-          <VertexShape vertex={n.vertex} color={ink(n.color)} size={n.size} />
+          <VertexShape vertex={n.vertex} color={tint || ink(n.color)} size={n.size} />
           {!preview && (
             <MathLabel
               value={n.value}
@@ -323,9 +335,8 @@ export default function DiagramScene({
                 y="-20"
                 width="144"
                 height="40"
-                rx="4"
-                fill="#819cd0"
-                opacity=".15"
+                rx="16"
+                fill="#000"
               />
             )}
             <MathLabel value={a.value} size={a.size} color={ink(a.color)} />

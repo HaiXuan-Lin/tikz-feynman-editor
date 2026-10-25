@@ -18,35 +18,128 @@ const fmt = (n) => Number(n.toFixed(2))
 export const pathFromPoints = (points) =>
   points.map((p, i) => `${i ? 'L' : 'M'}${fmt(p[0])},${fmt(p[1])}`).join(' ')
 
-export function edgeCurve(from, to, edge) {
-  const start = from.position,
-    end = to.position
-  if (edge.from === edge.to || length(sub(start, end)) < 0.1) {
-    const direction = {top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0]}[
-      edge.loopDirection
-    ] || [0, -1]
+// Angles follow TikZ: 0° points right and 90° points up, while screen y grows downward.
+export const normalizeAngle = (degrees) => {
+  const angle = ((((degrees + 180) % 360) + 360) % 360) - 180
+  return angle === -180 ? 180 : angle
+}
+export const angleVector = (degrees) => {
+  const radians = (degrees * Math.PI) / 180
+  return [Math.cos(radians), -Math.sin(radians)]
+}
+export const vectorAngle = (p) =>
+  normalizeAngle((Math.atan2(-p[1], p[0]) * 180) / Math.PI)
+const angularDistance = (a, b) => Math.abs(normalizeAngle(a - b))
+export const isLoop = (edge, from, to) =>
+  edge.from === edge.to || length(sub(from.position, to.position)) < 0.1
+
+// A TikZ loop leaves at `out`, returns from `in`, and uses `distance` for both
+// Bézier controls. `loopSize` is half the loop's reach, matching the circle shape.
+export function loopControls(edge) {
+  const turn = edge.loopClockwise === false ? -1 : 1,
+    angle = edge.loopAngle ?? 90,
+    spread = edge.loopSpread ?? 45
+  return {
+    out: angle + turn * spread,
+    in: angle - turn * spread,
+    distance: (8 * (edge.loopSize || 60)) / (3 * Math.cos((spread * Math.PI) / 180)),
+  }
+}
+
+const cubic = (a, b, c, d) => (t) => {
+  const s = 1 - t
+  return {
+    point: [0, 1].map(
+      (i) =>
+        s * s * s * a[i] + 3 * s * s * t * b[i] + 3 * s * t * t * c[i] + t * t * t * d[i],
+    ),
+    tangent: unit(
+      [0, 1].map(
+        (i) =>
+          3 * s * s * (b[i] - a[i]) +
+          6 * s * t * (c[i] - b[i]) +
+          3 * t * t * (d[i] - c[i]),
+      ),
+    ),
+  }
+}
+
+function loopCurve(start, edge) {
+  const turn = edge.loopClockwise === false ? -1 : 1
+  if (edge.curve === 'ellipse') {
+    // A circle (or ellipse) touching its vertex, as in textbook tadpoles.
+    const direction = angleVector(edge.loopAngle ?? 90)
     const radius = edge.loopSize || 60
     const center = add(start, scale(direction, radius))
     const initial = Math.atan2(-direction[1], -direction[0])
-    const stretch = (v) => {
-      if (edge.curve !== 'ellipse') return v
-      const perpendicular = normal(direction)
-      return add(
+    const perpendicular = normal(direction)
+    const stretch = (v) =>
+      add(
         scale(direction, v[0] * direction[0] + v[1] * direction[1]),
         scale(
           perpendicular,
           (v[0] * perpendicular[0] + v[1] * perpendicular[1]) * (edge.ellipseRatio ?? 1),
         ),
       )
-    }
     return (t) => {
-      const angle = initial + t * Math.PI * 2
+      const angle = initial + turn * t * Math.PI * 2
       return {
         point: add(center, stretch([Math.cos(angle) * radius, Math.sin(angle) * radius])),
-        tangent: unit(stretch([-Math.sin(angle), Math.cos(angle)])),
+        tangent: unit(stretch(scale([-Math.sin(angle), Math.cos(angle)], turn))),
       }
     }
   }
+  const loop = loopControls(edge)
+  return cubic(
+    start,
+    add(start, scale(angleVector(loop.out), loop.distance)),
+    add(start, scale(angleVector(loop.in), loop.distance)),
+    start,
+  )
+}
+
+// New loops go into the widest free direction around a vertex, preferring the top.
+export function freeLoopAngle(document, id, ignore = null) {
+  const nodes = new Map(document.nodes.map((n) => [n.id, n])),
+    vertex = nodes.get(id)
+  if (!vertex) return 90
+  const taken = []
+  for (const e of document.edges) {
+    if (e.id === ignore || (e.from !== id && e.to !== id)) continue
+    const from = nodes.get(e.from),
+      to = nodes.get(e.to)
+    if (!from || !to) continue
+    if (isLoop(e, from, to)) {
+      taken.push(e.loopAngle ?? 90)
+      continue
+    }
+    const curve = edgeCurve(from, to, e)
+    if (e.from === id) taken.push(vectorAngle(curve(0).tangent))
+    if (e.to === id) taken.push(vectorAngle(scale(curve(1).tangent, -1)))
+  }
+  // Labels of marked vertices sit above them.
+  if (vertex.value && vertex.vertex !== 'none') taken.push(90)
+  if (!taken.length) return 90
+  const sorted = taken.map((a) => ((a % 360) + 360) % 360).sort((a, b) => a - b)
+  let best = null
+  sorted.forEach((angle, i) => {
+    const gap = (i + 1 < sorted.length ? sorted[i + 1] : sorted[0] + 360) - angle
+    const candidate = normalizeAngle(Math.round((angle + gap / 2) / 5) * 5)
+    const distance = angularDistance(candidate, 90)
+    if (
+      !best ||
+      gap > best.gap + 1e-6 ||
+      (Math.abs(gap - best.gap) <= 1e-6 && distance < best.distance)
+    )
+      best = {gap, angle: candidate, distance}
+  })
+  return best.angle
+}
+
+export function edgeCurve(from, to, edge) {
+  const start = from.position,
+    end = to.position
+  if (isLoop(edge, from, to)) return loopCurve(start, edge)
   const delta = sub(end, start),
     n = normal(unit(delta))
   if (edge.curve === 'ellipse') {
@@ -91,10 +184,9 @@ export function edgeGeometry(from, to, edge) {
     if (i) arc += length(sub(sample.point, samples[i - 1].point))
     return arc
   })
-  const trimmed =
-    edge.from === edge.to ? 0 : Math.min(0.45, vertexRadius(from) / Math.max(arc, 1))
-  const endTrimmed =
-    edge.from === edge.to ? 0 : Math.min(0.45, vertexRadius(to) / Math.max(arc, 1))
+  const loop = isLoop(edge, from, to)
+  const trimmed = loop ? 0 : Math.min(0.45, vertexRadius(from) / Math.max(arc, 1))
+  const endTrimmed = loop ? 0 : Math.min(0.45, vertexRadius(to) / Math.max(arc, 1))
   const at = (ratio) => curve(trimmed + ratio * (1 - trimmed - endTrimmed))
   const cycles = Math.max(1, Math.floor(arc / (edge.line === 'gluon' ? 12 : 16)))
   const points = (wave = false, offset = 0) =>
@@ -228,9 +320,37 @@ export function nearestEdge(document, point, tolerance = 14, exclude = new Set()
 // aligned cursor onto the curve (which would make the connection diagonal).
 function axisIntersections(from, to, edge, component, coordinate) {
   const curve = edgeCurve(from, to, edge)
-  const loop = edge.from === edge.to || length(sub(from.position, to.position)) < 0.1
+  const loop = isLoop(edge, from, to)
   let roots = []
-  if (loop || edge.curve === 'ellipse') {
+  if (loop && edge.curve !== 'ellipse') {
+    // TikZ loops are cubic; bracket sign changes and bisect each root.
+    const value = (t) => curve(t).point[component] - coordinate,
+      steps = 240
+    let t0 = 0.02,
+      v0 = value(t0)
+    for (let i = 1; i <= steps; i++) {
+      const t1 = 0.02 + (0.96 * i) / steps,
+        v1 = value(t1)
+      if (v0 === 0) roots.push(t0)
+      else if (v0 * v1 < 0) {
+        let low = t0,
+          high = t1,
+          lowValue = v0
+        for (let k = 0; k < 60; k++) {
+          const middle = (low + high) / 2,
+            middleValue = value(middle)
+          if (lowValue * middleValue <= 0) high = middle
+          else {
+            low = middle
+            lowValue = middleValue
+          }
+        }
+        roots.push((low + high) / 2)
+      }
+      t0 = t1
+      v0 = v1
+    }
+  } else if (loop || edge.curve === 'ellipse') {
     const first = curve(0).point[component],
       last = curve(loop ? 0.5 : 1).point[component]
     const center = (first + last) / 2,

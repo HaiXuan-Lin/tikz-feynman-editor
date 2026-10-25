@@ -93,7 +93,7 @@ test('reported 25px left loop exports as a closed curve with native arrow style'
   const doc = diagram()
   doc.edges.push(
     edge(doc.nodes[0].id, doc.nodes[0].id, 'fermion', {
-      loopDirection: 'left',
+      loopAngle: 180,
       loopSize: 25,
     }),
   )
@@ -121,7 +121,7 @@ test('all loop directions, radii and ellipse ratios preserve analytic extents', 
         const doc = diagram('scalar')
         doc.edges = [
           edge(doc.nodes[0].id, doc.nodes[0].id, 'scalar', {
-            loopDirection: direction,
+            loopAngle: {top: 90, right: 0, bottom: -90, left: 180}[direction],
             loopSize: radius,
             curve: 'ellipse',
             ellipseRatio: ratio,

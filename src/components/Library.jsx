@@ -13,7 +13,13 @@ export function LinePreview({line}) {
     to = {id: 'b', position: [92, 18], vertex: 'none', size: 0}
   return (
     <svg viewBox="0 0 100 36" class="line-preview">
-      <EdgeShape from={from} to={to} edge={edge('a', 'b', line)} preview />
+      <EdgeShape
+        from={from}
+        to={to}
+        edge={edge('a', 'b', line)}
+        preview
+        tint="currentColor"
+      />
     </svg>
   )
 }
@@ -26,7 +32,7 @@ function TemplatePreview({template}) {
       class="template-preview"
       aria-hidden="true"
     >
-      <DiagramScene document={doc} preview />
+      <DiagramScene document={doc} preview tint="currentColor" />
     </svg>
   )
 }
@@ -58,7 +64,7 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
           onClick={() => setTab('templates')}
         >
           {t('常用模板')}
-          <span>12</span>
+          <span>{templates.length}</span>
         </button>
       </div>
       <div class="panel-scroll">
@@ -66,7 +72,7 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
           <>
             <div class="section-label">
               {t('传播子')}
-              <span>{t('选择后拖动连线')}</span>
+              <span>{t('Drag on canvas')}</span>
             </div>
             <div class="propagator-grid">
               {propagators.map((p) => (
@@ -84,7 +90,7 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
             </div>
             <div class="section-label">
               {t('顶点')}
-              <span>{t('选择后点击画布')}</span>
+              <span>{t('Click canvas')}</span>
             </div>
             <div class="vertex-grid">
               {vertices.map((v) => (
@@ -98,7 +104,7 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
                     {v.id === 'none' ? (
                       <circle r="4" stroke="currentColor" fill="none" />
                     ) : (
-                      <VertexShape vertex={v.id} color={null} size={null} />
+                      <VertexShape vertex={v.id} color="currentColor" size={null} />
                     )}
                   </svg>
                   <span>{t(v.name)}</span>
@@ -107,7 +113,11 @@ export default function Library({line, vertex, onLine, onVertex, onTemplate, onC
             </div>
             <div class="library-tip">
               <Icon name="loop" />
-              <p>{t('自环、多重边、反项插入与动量标签，可在选中图形后编辑。')}</p>
+              <p>
+                {t(
+                  'Drag out of a vertex and back onto it to draw a self-loop; select the loop and drag its handle to turn it to any angle.',
+                )}
+              </p>
             </div>
           </>
         ) : (

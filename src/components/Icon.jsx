@@ -49,11 +49,11 @@ export default function Icon({name, size = 18}) {
     </svg>
   )
 }
-export function ToolButton({icon, label, shortcut, active, ...props}) {
+export function ToolButton({icon, label, shortcut, active, toggle, ...props}) {
   return (
     <button
       type="button"
-      class={`tool-button ${active ? 'active' : ''}`}
+      class={`tool-button${toggle ? ' toggle' : ''}${active ? ' active' : ''}`}
       title={`${label}${shortcut ? ` (${shortcut})` : ''}`}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}

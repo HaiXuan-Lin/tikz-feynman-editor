@@ -221,7 +221,7 @@ export const templates = [
         [
           [0, 1, 'scalar'],
           [1, 2, 'scalar'],
-          [1, 1, 'scalar', {loopSize: 65, value: 'k', loopDirection: 'top'}],
+          [1, 1, 'scalar', {loopSize: 65, value: 'k', loopAngle: 90}],
         ],
       ),
   },
