@@ -19,11 +19,36 @@ task_run() {
   fi
 }
 
+# Conda and cross-compilation packages ship commands with these same names.
+# Bundle metadata and Mach-O operations must use the installed Apple tools.
+app_identifier() {
+  /usr/bin/plutil -extract CFBundleIdentifier raw -o - "$1/Contents/Info.plist"
+}
+
+verify_native_binary() {
+  local binary="$1" architecture="$2"
+  [[ -f "$binary" && -s "$binary" && -x "$binary" && ! -L "$binary" ]] || fail "Native executable is missing, empty or not executable: $binary"
+  /usr/bin/lipo "$binary" -verify_arch "$architecture" || fail "Native executable is not valid Mach-O for $architecture: $binary"
+}
+
+prepare_native_binary() {
+  verify_native_binary "$1" "$2"
+  /usr/bin/strip -x "$1"
+  verify_native_binary "$1" "$2"
+}
+
+sign_app() {
+  local allocator
+  allocator="$(/usr/bin/xcrun --find codesign_allocate)" || fail "Apple codesign_allocate is unavailable. Check the installed Apple Command Line Tools."
+  [[ -x "$allocator" ]] || fail "Apple codesign_allocate is not executable: $allocator"
+  CODESIGN_ALLOCATE="$allocator" /usr/bin/codesign --force --sign - "$1"
+}
+
 confirm_replacement() {
   local destination="$1" answer
   [[ -e "$destination" || -L "$destination" ]] || return 0
   [[ -d "$destination" && ! -L "$destination" ]] || fail "Destination is not a regular app bundle: $destination"
-  [[ "$(plutil -extract CFBundleIdentifier raw -o - "$destination/Contents/Info.plist" 2>/dev/null)" == "$APP_IDENTIFIER" ]] || fail "Destination belongs to another application: $destination"
+  [[ "$(app_identifier "$destination" 2>/dev/null)" == "$APP_IDENTIFIER" ]] || fail "Destination belongs to another application: $destination"
   printf 'An application already exists at:\n  %s\nReplace it? [y/N] ' "$destination"
   if ! IFS= read -r answer; then answer=""; fi
   case "$answer" in
@@ -35,11 +60,10 @@ confirm_replacement() {
 verify_app() {
   local app="$1" architecture
   [[ -d "$app" && ! -L "$app" ]] || fail "Application is missing: $app"
-  [[ "$(plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist")" == "$APP_IDENTIFIER" ]] || fail "Invalid application identifier."
-  [[ "$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")" == TikZFeynmanEditor ]] || fail "Invalid application executable."
-  [[ -x "$app/Contents/MacOS/TikZFeynmanEditor" ]] || fail "Application executable is missing or not executable."
-  architecture="$(uname -m)"
-  /usr/bin/lipo "$app/Contents/MacOS/TikZFeynmanEditor" -verify_arch "$architecture" || fail "Application does not support this Mac ($architecture)."
+  [[ "$(app_identifier "$app")" == "$APP_IDENTIFIER" ]] || fail "Invalid application identifier."
+  [[ "$(/usr/bin/plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")" == TikZFeynmanEditor ]] || fail "Invalid application executable."
+  architecture="$(/usr/bin/uname -m)"
+  verify_native_binary "$app/Contents/MacOS/TikZFeynmanEditor" "$architecture"
   [[ -s "$app/Contents/Resources/build-manifest.sha256" ]] || fail "Build verification manifest is missing. Run ./build.sh first."
   (cd "$app" && /usr/bin/shasum -a 256 -c Contents/Resources/build-manifest.sha256 >/dev/null) || fail "Built application files failed integrity checks."
   /usr/bin/codesign --verify --deep --strict "$app" || fail "Application signature verification failed."
@@ -51,7 +75,7 @@ publish_app() {
   if [[ -e "$destination" || -L "$destination" ]]; then
     [[ "$TASK_REPLACE_APPROVED" == true ]] || fail "An app appeared during this operation. Run again to confirm replacement."
     [[ -d "$destination" && ! -L "$destination" ]] || fail "Destination changed during the operation."
-    [[ "$(plutil -extract CFBundleIdentifier raw -o - "$destination/Contents/Info.plist" 2>/dev/null)" == "$APP_IDENTIFIER" ]] || fail "Destination belongs to another application."
+    [[ "$(app_identifier "$destination" 2>/dev/null)" == "$APP_IDENTIFIER" ]] || fail "Destination belongs to another application."
     TASK_BACKUP="$TASK_WORK/previous.app"
     task_run mv "$destination" "$TASK_BACKUP"
   fi

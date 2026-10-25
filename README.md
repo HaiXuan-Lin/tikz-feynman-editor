@@ -14,7 +14,9 @@ On macOS (Apple Silicon), compile the repository into an application in this dir
 ./build.sh
 ```
 
-The script detects missing build tools and dependencies automatically. After a successful build, install the app into `/Applications/` by running:
+The script detects missing build tools and dependencies automatically. Native compilation, binary stripping and code signing explicitly use Apple tools, including Apple's `codesign_allocate`, so Conda tools with the same names on `PATH` cannot replace them. The native executable is checked as Mach-O before and after stripping.
+
+After a successful build, install the app into `/Applications/` by running:
 
 ```bash
 ./install.sh

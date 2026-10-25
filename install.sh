@@ -5,11 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$ROOT/scripts/macos-common.sh"
 [[ $# == 0 ]] || fail "Usage: ./install.sh (no arguments)."
-[[ "$(uname -s)" == Darwin ]] || fail "Run this script on macOS."
+[[ "$(/usr/bin/uname -s)" == Darwin ]] || fail "Run this script on macOS."
 SOURCE="$ROOT/$APP_NAME.app"
 INSTALL_DIRECTORY="/Applications"
 TASK_OUTPUT="$INSTALL_DIRECTORY/$APP_NAME.app"
-[[ -d "$SOURCE" ]] || fail "Built application not found. Run ./build.sh first."
+[[ -d "$SOURCE" ]] || fail "No completed application found at $SOURCE. Run ./build.sh and wait for all 7 steps to succeed before running ./install.sh."
 printf 'Verifying the built application...\n'
 verify_app "$SOURCE"
 confirm_replacement "$TASK_OUTPUT" || exit 0

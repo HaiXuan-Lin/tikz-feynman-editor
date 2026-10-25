@@ -6,8 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$ROOT/scripts/macos-common.sh"
 source "$ROOT/scripts/macos-toolchain.sh"
 [[ $# == 0 ]] || fail "Usage: ./build.sh (no arguments). Architecture and replacement are handled automatically."
-[[ "$(uname -s)" == Darwin ]] || fail "Run this script on macOS."
-ARCH="$(uname -m)"
+[[ "$(/usr/bin/uname -s)" == Darwin ]] || fail "Run this script on macOS."
+ARCH="$(/usr/bin/uname -m)"
 case "$ARCH" in
   arm64) NODE_ARCH=arm64 ;;
   x86_64) NODE_ARCH=x64 ;;
@@ -31,6 +31,7 @@ export SWIFT_MODULECACHE_PATH="$TASK_WORK/swift-cache"
 printf '\n[1/7] Preparing the build toolchain...\n'
 ensure_apple_tools
 ensure_node "$NODE_ARCH" "$TASK_WORK"
+printf 'Using Apple native tools independently of the shell PATH.\n'
 
 printf '\n[2/7] Installing dependencies in an isolated workspace...\n'
 for file in package.json package-lock.json index.html favicon.ico LICENSE README.md build.sh install.sh; do
@@ -42,7 +43,7 @@ done
 (cd "$TASK_WORK/web" && npm ci --include=dev --no-audit --no-fund)
 
 printf '\n[3/7] Running tests before compilation...\n'
-bash -n "$ROOT/build.sh" "$ROOT/install.sh" "$ROOT/scripts/macos-common.sh" "$ROOT/scripts/macos-toolchain.sh"
+/bin/bash -n "$ROOT/build.sh" "$ROOT/install.sh" "$ROOT/scripts/macos-common.sh" "$ROOT/scripts/macos-toolchain.sh"
 (cd "$TASK_WORK/web" && npm run format:check && npm test)
 
 printf '\n[4/7] Compiling the web editor and bundling offline resources...\n'
@@ -73,17 +74,17 @@ fs.writeFileSync(plistPath, `<?xml version="1.0" encoding="UTF-8"?>
 NODE
 
 printf '\n[5/7] Compiling the native WebKit app for %s...\n' "$ARCH"
-xcrun swiftc -O -whole-module-optimization -module-cache-path "$TASK_WORK/swift-cache" \
+/usr/bin/xcrun swiftc -O -whole-module-optimization -module-cache-path "$TASK_WORK/swift-cache" \
   -target "$ARCH-apple-macosx11.0" -framework Cocoa -framework WebKit \
   "$ROOT/macos/main.swift" -o "$BUILT/Contents/MacOS/TikZFeynmanEditor"
-strip -x "$BUILT/Contents/MacOS/TikZFeynmanEditor"
+prepare_native_binary "$BUILT/Contents/MacOS/TikZFeynmanEditor" "$ARCH"
 
 printf '\n[6/7] Testing compiled resources, signature, and offline WebKit startup...\n'
 node "$ROOT/scripts/verify-app.mjs" "$BUILT"
-plutil -lint "$BUILT/Contents/Info.plist"
-codesign --force --sign - "$BUILT"
+/usr/bin/plutil -lint "$BUILT/Contents/Info.plist"
+sign_app "$BUILT"
 verify_app "$BUILT"
-xcrun swiftc -O -module-cache-path "$TASK_WORK/swift-cache" \
+/usr/bin/xcrun swiftc -O -module-cache-path "$TASK_WORK/swift-cache" \
   -framework Cocoa -framework WebKit "$ROOT/macos/smoke-test.swift" -o "$TASK_WORK/smoke-test"
 "$TASK_WORK/smoke-test" "$RESOURCES"
 
