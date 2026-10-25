@@ -161,19 +161,26 @@ export function edgeCurve(from, to, edge) {
       }
     }
   }
-  const control = add(
-    scale(add(start, end), 0.5),
-    scale(n, -length(delta) * Math.tan(((edge.bend || 0) * Math.PI) / 360)),
+  if (!edge.bend)
+    return (t) => ({point: add(start, scale(delta, t)), tangent: unit(delta)})
+  // TikZ's `bend left=α` (exported with α = bend / 2): out=α and in=180-α
+  // relative to the chord, both controls 0.3915 chord lengths away.
+  const alpha = (edge.bend * Math.PI) / 360,
+    u = unit(delta),
+    left = scale(n, -1),
+    distance = 0.3915 * length(delta)
+  return cubic(
+    start,
+    add(
+      start,
+      scale(add(scale(u, Math.cos(alpha)), scale(left, Math.sin(alpha))), distance),
+    ),
+    add(
+      end,
+      scale(add(scale(u, -Math.cos(alpha)), scale(left, Math.sin(alpha))), distance),
+    ),
+    end,
   )
-  return (t) => ({
-    point: add(
-      add(scale(start, (1 - t) ** 2), scale(control, 2 * (1 - t) * t)),
-      scale(end, t * t),
-    ),
-    tangent: unit(
-      add(scale(sub(control, start), 2 * (1 - t)), scale(sub(end, control), 2 * t)),
-    ),
-  })
 }
 
 export function edgeGeometry(from, to, edge) {
@@ -318,39 +325,45 @@ export function nearestEdge(document, point, tolerance = 14, exclude = new Set()
 
 // Solve the actual curve against an axis, rather than projecting an already
 // aligned cursor onto the curve (which would make the connection diagonal).
+// Cubics bracket each sign change and bisect it; lines and arcs are closed-form.
+function cubicRoots(curve, component, coordinate) {
+  const value = (t) => curve(t).point[component] - coordinate,
+    roots = [],
+    steps = 240
+  let t0 = 0.02,
+    v0 = value(t0)
+  for (let i = 1; i <= steps; i++) {
+    const t1 = 0.02 + (0.96 * i) / steps,
+      v1 = value(t1)
+    if (v0 === 0) roots.push(t0)
+    else if (v0 * v1 < 0) {
+      let low = t0,
+        high = t1,
+        lowValue = v0
+      for (let k = 0; k < 60; k++) {
+        const middle = (low + high) / 2,
+          middleValue = value(middle)
+        if (lowValue * middleValue <= 0) high = middle
+        else {
+          low = middle
+          lowValue = middleValue
+        }
+      }
+      roots.push((low + high) / 2)
+    }
+    t0 = t1
+    v0 = v1
+  }
+  return roots
+}
+
 function axisIntersections(from, to, edge, component, coordinate) {
   const curve = edgeCurve(from, to, edge)
   const loop = isLoop(edge, from, to)
   let roots = []
-  if (loop && edge.curve !== 'ellipse') {
-    // TikZ loops are cubic; bracket sign changes and bisect each root.
-    const value = (t) => curve(t).point[component] - coordinate,
-      steps = 240
-    let t0 = 0.02,
-      v0 = value(t0)
-    for (let i = 1; i <= steps; i++) {
-      const t1 = 0.02 + (0.96 * i) / steps,
-        v1 = value(t1)
-      if (v0 === 0) roots.push(t0)
-      else if (v0 * v1 < 0) {
-        let low = t0,
-          high = t1,
-          lowValue = v0
-        for (let k = 0; k < 60; k++) {
-          const middle = (low + high) / 2,
-            middleValue = value(middle)
-          if (lowValue * middleValue <= 0) high = middle
-          else {
-            low = middle
-            lowValue = middleValue
-          }
-        }
-        roots.push((low + high) / 2)
-      }
-      t0 = t1
-      v0 = v1
-    }
-  } else if (loop || edge.curve === 'ellipse') {
+  if (edge.curve !== 'ellipse' && (loop || edge.bend))
+    roots = cubicRoots(curve, component, coordinate)
+  else if (loop || edge.curve === 'ellipse') {
     const first = curve(0).point[component],
       last = curve(loop ? 0.5 : 1).point[component]
     const center = (first + last) / 2,
@@ -368,20 +381,10 @@ function axisIntersections(from, to, edge, component, coordinate) {
         roots.push((phase + sign * angle + k * Math.PI * 2) / period)
   } else {
     const first = curve(0).point[component],
-      mid = curve(0.5).point[component],
-      last = curve(1).point[component]
-    const a = 2 * (first + last - 2 * mid),
-      b = last - first - a,
-      c = first - coordinate
-    if (Math.abs(a) < 1e-9) {
-      if (Math.abs(b) < 1e-9) return Math.abs(c) < 1e-9 ? null : []
-      roots = [-c / b]
-    } else {
-      const discriminant = b * b - 4 * a * c
-      if (discriminant < -1e-9) return []
-      const root = Math.sqrt(Math.max(0, discriminant))
-      roots = [(-b - root) / (2 * a), (-b + root) / (2 * a)]
-    }
+      change = curve(1).point[component] - first
+    // A collinear edge has infinitely many valid axis intersections.
+    if (Math.abs(change) < 1e-9) return Math.abs(first - coordinate) < 1e-9 ? null : []
+    roots = [(coordinate - first) / change]
   }
   return roots.filter((t) => t >= 0.02 && t <= 0.98)
 }

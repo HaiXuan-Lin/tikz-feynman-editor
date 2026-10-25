@@ -27,6 +27,15 @@ export function vertexZones(n, zoom = 1) {
   return {core, hit: core + 13 / zoom}
 }
 
+// The default spot matches TikZ: centred on unmarked vertices, above marked ones.
+export function vertexLabelPosition(n) {
+  const offset = n.labelOffset || [0, 0]
+  return {
+    x: offset[0],
+    y: (n.vertex === 'none' ? 0 : -(vertexRadius(n) + 20)) + offset[1],
+  }
+}
+
 export function EdgeShape({
   from,
   to,
@@ -301,10 +310,19 @@ export default function DiagramScene({
           )}
           <VertexShape vertex={n.vertex} color={tint || ink(n.color)} size={n.size} />
           {!preview && (
-            <MathLabel
-              value={n.value}
-              y={n.vertex === 'none' ? 0 : -(vertexRadius(n) + 20)}
-              color={ink(n.color)}
+            <MathLabel value={n.value} {...vertexLabelPosition(n)} color={ink(n.color)} />
+          )}
+          {!preview && n.value && selected(selection, 'node', n.id) && (
+            <rect
+              class="label-handle"
+              data-kind="vertex-label"
+              data-id={n.id}
+              x={vertexLabelPosition(n).x - 20}
+              y={vertexLabelPosition(n).y - 14}
+              width="40"
+              height="28"
+              rx="6"
+              fill="transparent"
             />
           )}
         </g>

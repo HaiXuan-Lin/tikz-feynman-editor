@@ -288,6 +288,22 @@ export default function Canvas({
       }
       return
     }
+    // A selected vertex's label can be dragged, except over the vertex centre,
+    // which still starts a propagator.
+    if (
+      tool === 'select' &&
+      target?.dataset.kind === 'vertex-label' &&
+      nodeHit(position)?.zone !== 'core'
+    ) {
+      gesture.current = {
+        type: 'label',
+        id: target.dataset.id,
+        start: position,
+        screen,
+        original: clone(diagram),
+      }
+      return
+    }
     if (tool === 'node') {
       const placed = placement(position)
       onNode(placed.point, nodeAt(position)?.id || null, placed.attachment)
@@ -415,6 +431,22 @@ export default function Canvas({
         ...g.original,
         edges: g.original.edges.map((e) => (e.id === g.id ? {...e, ...changes} : e)),
       })
+    } else if (g.type === 'label') {
+      const vertex = g.original.nodes.find((n) => n.id === g.id)
+      if (!vertex) return
+      let delta = sub(position, g.start)
+      // Shift keeps the label on its dominant axis.
+      if (event.shiftKey)
+        delta = Math.abs(delta[0]) > Math.abs(delta[1]) ? [delta[0], 0] : [0, delta[1]]
+      const offset = (vertex.labelOffset || [0, 0]).map(
+        (x, i) => Math.round(Math.max(-400, Math.min(400, x + delta[i])) * 2) / 2,
+      )
+      onPreview({
+        ...g.original,
+        nodes: g.original.nodes.map((n) =>
+          n.id === g.id ? {...n, labelOffset: offset[0] || offset[1] ? offset : null} : n,
+        ),
+      })
     } else if (g.type === 'move') {
       const raw = sub(position, g.start)
       const delta = snapEnabled ? snap(raw) : raw
@@ -488,6 +520,13 @@ export default function Canvas({
       else {
         onPreview(g.original)
         if (g.focus) onEditLabel()
+      }
+    }
+    if (g.type === 'label') {
+      if (moved) onCommit()
+      else {
+        onPreview(g.original)
+        onEditLabel()
       }
     }
     if (g.type === 'loop') {

@@ -303,6 +303,12 @@ const chinese = {
   Circle: '圆形',
   Opening: '开口角度',
   'Loop size': '自环大小',
+  'Drag the label on the canvas': '可在画布上拖动标签',
+  'Shift right (mm)': '右移 (mm)',
+  'Shift up (mm)': '上移 (mm)',
+  'Reset label position': '标签位置复位',
+  'Uses TikZ-Feynman with native curves (bend, arc, out/in) that match the canvas.':
+    '使用 TikZ-Feynman 原生曲线（bend、arc、out/in），与画布一致。',
   'Drag the round handle on the canvas to turn the loop.':
     '拖动画布上的圆形手柄，可连续旋转自环。',
   'Drag on canvas': '在画布上拖动',

@@ -171,7 +171,9 @@ export default function ExportPanel({
         </div>
         {tab === 'tex' && (
           <p class="export-note">
-            {t('使用 TikZ-Feynman；坐标已显式指定。屏幕曲线与 TikZ 曲线可能略有差异。')}
+            {t(
+              'Uses TikZ-Feynman with native curves (bend, arc, out/in) that match the canvas.',
+            )}
           </p>
         )}
       </section>

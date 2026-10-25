@@ -107,7 +107,7 @@ export default function App() {
       if (!selected(selection, kind, item.id)) return item
       const allowed =
         kind === 'node'
-          ? ['value', 'vertex', 'position', 'size', 'color', 'attachment']
+          ? ['value', 'vertex', 'position', 'size', 'color', 'attachment', 'labelOffset']
           : kind === 'text'
             ? ['value', 'position', 'size', 'color']
             : [

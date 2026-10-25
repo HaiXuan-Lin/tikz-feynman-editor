@@ -10,13 +10,25 @@ function diagram(line = 'fermion', props = {}) {
     b = node(160, 80, {vertex: 'none'})
   return {...emptyDiagram(), nodes: [a, b], edges: [edge(a.id, b.id, line, props)]}
 }
-function drawnPaths(tex) {
-  return [...tex.matchAll(/\\draw\[[^\]]*\] ([^;]+);/g)].map((match) =>
-    [...match[1].matchAll(/\((-?[\d.]+), (-?[\d.]+)\)/g)].map((p) => [
-      Number(p[1]),
-      Number(p[2]),
-    ]),
-  )
+// Reads native TikZ arcs back as ellipses: centre, radii, rotation and sweep.
+function drawnArcs(tex) {
+  const arc =
+    /\\draw \[([^\]]*)\] \((-?[\d.]+), (-?[\d.]+)\) arc \[start angle=(-?[\d.]+), delta angle=(-?\d+), (?:radius=([\d.]+)|x radius=([\d.]+), y radius=([\d.]+))\]/g
+  return [...tex.matchAll(arc)].map((m) => {
+    const rotation = Number(m[1].match(/rotate around=\{(-?[\d.]+):/)?.[1] ?? 0),
+      start = [Number(m[2]), Number(m[3])],
+      rx = Number(m[6] ?? m[7]),
+      ry = Number(m[6] ?? m[8]),
+      angle = (Number(m[4]) * Math.PI) / 180,
+      turn = (rotation * Math.PI) / 180
+    // The start point sits at `start angle` on the ellipse in the rotated frame.
+    const local = [rx * Math.cos(angle), ry * Math.sin(angle)]
+    const centre = [
+      start[0] - (local[0] * Math.cos(turn) - local[1] * Math.sin(turn)),
+      start[1] - (local[0] * Math.sin(turn) + local[1] * Math.cos(turn)),
+    ]
+    return {options: m[1], start, centre, rx, ry, rotation, sweep: Number(m[5])}
+  })
 }
 
 test('default appearance inherits TikZ-Feynman without exported numeric overrides', () => {
@@ -89,7 +101,7 @@ test('old editor-imposed defaults migrate, while genuine custom settings remain'
   assert.equal(restored.edges[0].color, '#5674bd')
 })
 
-test('reported 25px left loop exports as a closed curve with native arrow style', () => {
+test('reported 25px left loop exports as a native closed arc with native arrow style', () => {
   const doc = diagram()
   doc.edges.push(
     edge(doc.nodes[0].id, doc.nodes[0].id, 'fermion', {
@@ -98,14 +110,13 @@ test('reported 25px left loop exports as a closed curve with native arrow style'
     }),
   )
   const tex = toTeX(doc, {standalone: true}),
-    paths = drawnPaths(tex)
-  assert.equal(paths.length, 2)
-  const loop = paths[1]
-  assert.deepEqual(loop[0], [1, -1])
-  assert.deepEqual(loop.at(-1), loop[0])
-  assert.equal(Math.min(...loop.map((p) => p[0])), 0.375)
-  assert.equal(Math.max(...loop.map((p) => p[0])), 1)
-  assert.equal(tex.split('/tikzfeynman/with arrow=').length - 1, 2)
+    [loop] = drawnArcs(tex)
+  assert.equal(loop.options, 'fermion')
+  assert.deepEqual(loop.start, [1, -1])
+  assert.equal(Math.abs(loop.sweep), 360)
+  assert.ok(Math.abs(loop.centre[0] - loop.rx - 0.375) < 0.002)
+  assert.ok(Math.abs(loop.centre[0] + loop.rx - 1) < 0.002)
+  assert.match(tex, /\\diagram\* \{\n {4}\(v0\) -- \[fermion\] \(v1\)\n {2}\};/)
   assert.doesNotMatch(tex, /line width=|minimum size=|arrow size=/)
 })
 
@@ -127,11 +138,15 @@ test('all loop directions, radii and ellipse ratios preserve analytic extents', 
             ellipseRatio: ratio,
           }),
         ]
-        const loop = drawnPaths(toTeX(doc))[0],
+        const [loop] = drawnArcs(toTeX(doc)),
           r = radius / 80
-        assert.deepEqual(loop.at(-1), loop[0])
+        assert.equal(Math.abs(loop.sweep), 360)
         const rx = dx ? r : r * ratio,
           ry = dy ? r : r * ratio,
+          turn = (loop.rotation * Math.PI) / 180,
+          // Half extents of the (possibly rotated) exported ellipse.
+          halfX = Math.hypot(loop.rx * Math.cos(turn), loop.ry * Math.sin(turn)),
+          halfY = Math.hypot(loop.rx * Math.sin(turn), loop.ry * Math.cos(turn)),
           expected = [
             1 + dx * r - rx,
             1 + dx * r + rx,
@@ -139,11 +154,11 @@ test('all loop directions, radii and ellipse ratios preserve analytic extents', 
             -1 + dy * r + ry,
           ],
           actual = [
-            Math.min(...loop.map((p) => p[0])),
-            Math.max(...loop.map((p) => p[0])),
-            Math.min(...loop.map((p) => p[1])),
-            Math.max(...loop.map((p) => p[1])),
+            loop.centre[0] - halfX,
+            loop.centre[0] + halfX,
+            loop.centre[1] - halfY,
+            loop.centre[1] + halfY,
           ]
-        actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) < 0.001))
+        actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) < 0.002))
       }
 })

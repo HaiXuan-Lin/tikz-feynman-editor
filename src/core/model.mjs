@@ -23,6 +23,8 @@ export const node = (x, y, props = {}) => ({
   color: null,
   size: null,
   attachment: null,
+  // Canvas units moved from the default label position; null keeps the default.
+  labelOffset: null,
   ...props,
 })
 export const edge = (from, to, line = 'fermion', props = {}) => ({
@@ -82,6 +84,13 @@ const position = (value) => {
   return [...value]
 }
 
+const labelOffset = (value) =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  value.every((x) => typeof x === 'number' && Number.isFinite(x)) &&
+  (value[0] || value[1])
+    ? value.map((x) => Math.max(-400, Math.min(400, x)))
+    : null
 const legacyLoopAngles = new Map([
   ['top', 90],
   ['right', 0],
@@ -129,6 +138,7 @@ export function parseDiagram(input) {
       vertex: vertices.some((v) => v.id === n.vertex) ? n.vertex : 'none',
       color: color(n.color),
       size: inherited(n.size, 5, 0.1, 200),
+      labelOffset: labelOffset(n.labelOffset),
       attachment:
         !legacy && n.attachment
           ? {edge: text(n.attachment.edge), t: bounded(n.attachment.t, 0.5, 0.02, 0.98)}

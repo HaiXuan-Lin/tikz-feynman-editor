@@ -65,7 +65,7 @@ export function svgDocument(scene, box, title, background = true) {
   const clone = scene.cloneNode(true)
   clone
     .querySelectorAll(
-      '.hit-target,.selection-halo,.hover-halo,.node-handle,.edge-handle,.draft',
+      '.hit-target,.selection-halo,.hover-halo,.node-handle,.label-handle,.edge-handle,.draft',
     )
     .forEach((el) => el.remove())
   clone.querySelectorAll('[tabindex],[role],[data-kind],[data-id]').forEach((el) => {

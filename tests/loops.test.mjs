@@ -113,7 +113,8 @@ test('new loops take the widest free direction around a vertex', () => {
   const leg = edge(center.id, right.id, 'plain', {bend: 90}),
     bent = {...document, edges: [leg]}
   const leaving = vectorAngle(edgeCurve(center, right, leg)(0).tangent)
-  assert.ok(leaving > 60)
+  // TikZ's bend left=45 leaves the vertex at 45°.
+  assert.ok(Math.abs(leaving - 45) < 1e-9)
   assert.ok(Math.abs(freeLoopAngle(bent, center.id) - (leaving - 180)) <= 2.5)
 })
 

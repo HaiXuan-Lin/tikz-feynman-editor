@@ -122,6 +122,15 @@ kbd {
 .hover-core {
   fill: var(--cell-hover);
 }
+.label-handle {
+  stroke: hsla(0, 0%, 0%, 0.22);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  cursor: move;
+}
+.label-handle:hover {
+  stroke: var(--ui-blue);
+}
 .move-ring {
   fill: none;
   stroke: hsla(0, 0%, 0%, 0.28);

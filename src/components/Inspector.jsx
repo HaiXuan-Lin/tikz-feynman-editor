@@ -115,6 +115,15 @@ function PercentageField({label, value, onChange, min = 1, max = 99, hint}) {
     </Field>
   )
 }
+// Label offsets are stored in canvas units (8 per mm, y down) and shown as the
+// rightward and upward shifts that the TikZ export uses.
+const labelShift = (n, axis) =>
+  Number((((n.labelOffset || [0, 0])[axis] / 8) * (axis ? -1 : 1) || 0).toFixed(2))
+function shiftLabel(n, axis, mm) {
+  const offset = [...(n.labelOffset || [0, 0])]
+  offset[axis] = mm * 8 * (axis ? -1 : 1)
+  return offset[0] || offset[1] ? offset : null
+}
 const directions = [
   [135, '↖'],
   [90, '↑'],
@@ -618,6 +627,40 @@ export default function Inspector({
                 })
               }
             />
+            {n.value && (
+              <>
+                <div class="section-label">
+                  {t('标签位置')}
+                  <span>{t('Drag the label on the canvas')}</span>
+                </div>
+                <div class="two-columns">
+                  <NumberField
+                    label={t('Shift right (mm)')}
+                    value={labelShift(n, 0)}
+                    min={-50}
+                    max={50}
+                    step={0.5}
+                    onChange={(mm) => update({labelOffset: shiftLabel(n, 0, mm)})}
+                  />
+                  <NumberField
+                    label={t('Shift up (mm)')}
+                    value={labelShift(n, 1)}
+                    min={-50}
+                    max={50}
+                    step={0.5}
+                    onChange={(mm) => update({labelOffset: shiftLabel(n, 1, mm)})}
+                  />
+                </div>
+                {n.labelOffset && (
+                  <button
+                    class="secondary-button full-width"
+                    onClick={() => update({labelOffset: null})}
+                  >
+                    {t('Reset label position')}
+                  </button>
+                )}
+              </>
+            )}
 
             {n.attachment && (
               <div class="attachment-status">

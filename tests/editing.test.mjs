@@ -301,7 +301,10 @@ test('LaTeX exports actual clipped geometry and inline math labels', () => {
   assert.match(tex, /\$p_1\$/)
   assert.match(tex, /\$k\$/)
   assert.match(tex, /\\vertex\[dot\] \(v0\) at \(-1\.25, 0\) \{\};/)
-  assert.ok(tex.indexOf('\\vertex[dot') > tex.lastIndexOf('\\end{scope}'))
+  // The clipped edge joins named vertices, so TikZ stops it at their borders.
+  assert.match(tex, /\\path \(v0\) edge \[plain\] \(v1\);\n {2}\\end\{scope\}/)
+  assert.ok(tex.lastIndexOf('\\vertex') < tex.indexOf('\\path (v0)'))
+  assert.doesNotMatch(tex, /\([^()]*\)\s*--\s*\([^()]*\)\s*--/)
   assert.ok(!/undefined|NaN/.test(tex))
 })
 test('English and Chinese messages interpolate without translating user math', () => {
