@@ -66,6 +66,14 @@ export const annotation = (x, y, value = '\\mathcal{M} =') => ({
 })
 export const key = (kind, id) => `${kind}:${id}`
 export const selected = (selection, kind, id) => selection.includes(key(kind, id))
+// Moving a selected propagator carries its endpoints along.
+export const movingNodes = (document, selection) =>
+  new Set([
+    ...document.nodes.filter((n) => selected(selection, 'node', n.id)).map((n) => n.id),
+    ...document.edges
+      .filter((e) => selected(selection, 'edge', e.id))
+      .flatMap((e) => [e.from, e.to]),
+  ])
 export const snap = (position, enabled = true) =>
   enabled ? position.map((x) => (Math.round(x / (GRID / 2)) * GRID) / 2) : position
 

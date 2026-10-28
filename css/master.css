@@ -91,7 +91,6 @@ kbd {
 .tool-edge,
 .tool-node,
 .tool-text,
-.tool-select.hover-core,
 .canvas-host.drawing {
   cursor: crosshair;
 }
@@ -312,7 +311,8 @@ kbd {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 90;
+  /* Above the floating panels, so its dropdowns are never covered. */
+  z-index: 93;
   display: flex;
   height: 60px;
   background: var(--ui-black);
@@ -349,14 +349,15 @@ kbd {
   max-width: 100%;
   overflow: hidden;
   font-size: 9.5px;
-  line-height: 9.5px;
+  /* Tall enough that the clipped box keeps descenders such as g and p. */
+  line-height: 12px;
   color: hsl(0, 0%, 80%);
 }
 .toolbar .tool-button > span {
-  top: 6px;
+  top: 5px;
 }
 .toolbar .tool-button > kbd {
-  bottom: 6px;
+  bottom: 5px;
 }
 .toolbar .tool-button:hover:not(:disabled) {
   background: hsl(0, 0%, 28%);

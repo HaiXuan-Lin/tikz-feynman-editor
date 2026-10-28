@@ -6,6 +6,7 @@ import {
   emptyDiagram,
   parseDiagram,
   key,
+  movingNodes,
   setCrossing,
   reorderEdges,
   resolveAttachments,
@@ -313,4 +314,35 @@ test('English and Chinese messages interpolate without translating user math', (
   assert.equal(translate('en', '已插入{0}', '电子散射'), 'Inserted Electron scattering')
   assert.equal(translate('zh', 'Momentum along edge'), '动量沿线位置')
   assert.equal(translate('en', 'p_1 + \\gamma'), 'p_1 + \\gamma')
+})
+test('moving a selected propagator carries its endpoints along', () => {
+  const doc = crossing(),
+    [a, b, c] = doc.nodes
+  assert.deepEqual(
+    [...movingNodes(doc, [key('edge', doc.edges[0].id), key('node', c.id)])].sort(),
+    [a.id, b.id, c.id].sort(),
+  )
+  assert.equal(movingNodes(doc, [key('text', 'x')]).size, 0)
+})
+test('grid snapping keeps vertices on the grid when they join a propagator', () => {
+  const a = node(-120, 0),
+    b = node(120, 60),
+    c = node(-120, 120),
+    d = node(120, 120)
+  const slanted = edge(a.id, b.id, 'plain'),
+    level = edge(c.id, d.id, 'plain')
+  const doc = {...emptyDiagram(), nodes: [a, b, c, d], edges: [slanted, level]}
+  // A grid point on the propagator wins.
+  const exact = snapToGeometry(doc, [37, 126], {grid: 40})
+  assert.equal(exact.attachment.edge, level.id)
+  assert.ok(Math.abs(exact.point[0] - 40) < 1e-8 && Math.abs(exact.point[1] - 120) < 1e-8)
+  // Otherwise the vertex lands where the propagator crosses a grid line.
+  const crossing = snapToGeometry(doc, [-50, 18], {grid: 40})
+  assert.equal(crossing.attachment.edge, slanted.id)
+  assert.ok(
+    Math.abs(crossing.point[0] + 40) < 1e-8 && Math.abs(crossing.point[1] - 20) < 1e-8,
+  )
+  // Without grid snapping the vertex follows the cursor along the propagator.
+  const free = snapToGeometry(doc, [37, 126])
+  assert.ok(Math.abs(free.point[0] - 37) < 1e-8)
 })

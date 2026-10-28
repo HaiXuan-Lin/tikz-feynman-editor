@@ -15,6 +15,7 @@ import {
   edge,
   annotation,
   key,
+  movingNodes,
   selected,
   uid,
   parseDiagram,
@@ -464,10 +465,11 @@ export default function App() {
       if (directions[event.key] && selection.length) {
         event.preventDefault()
         const delta = directions[event.key].map((x) => x * (event.altKey ? 1 : GRID / 2))
+        const moving = movingNodes(diagram, selection)
         commit({
           ...diagram,
           nodes: diagram.nodes.map((n) =>
-            selected(selection, 'node', n.id)
+            moving.has(n.id)
               ? {...n, attachment: null, position: n.position.map((x, i) => x + delta[i])}
               : n,
           ),
@@ -499,9 +501,7 @@ export default function App() {
         diagram.annotations.find((a) => selected(selection, 'text', a.id))
       : null
   const hints = {
-    select: t(
-      'Drag from a vertex or empty space to draw · drag beside a vertex to move it',
-    ),
+    select: t('Drag to move · drag empty space to select · double-click for a vertex'),
     node: t('点击添加 · 拖动顶点可移动'),
     edge: t('拖动连线，或依次点击两个端点'),
     text: t('点击放置标注'),
@@ -543,7 +543,9 @@ export default function App() {
           <div class="empty-canvas-message">
             <span>{t('从一条传播子开始。')}</span>
             <p>
-              {t('Drag anywhere on the grid to draw a propagator, or insert a template.')}
+              {t(
+                'Pick a propagator (or press A) and drag on the grid to draw it, or insert a template.',
+              )}
             </p>
           </div>
         )}
@@ -689,7 +691,7 @@ export default function App() {
           vertex={vertex}
           onLine={(id) => {
             setLine(id)
-            if (!['select', 'edge'].includes(tool)) setTool('select')
+            setTool('edge')
           }}
           onVertex={(id) => {
             setVertex(id)
@@ -911,16 +913,19 @@ export default function App() {
             </div>
             <div class="help-grid">
               {[
-                [t('Draw a propagator'), t('Drag from a vertex or empty space')],
-                [t('Self-loop'), t('Drag out of a vertex and back')],
-                [t('Move a vertex'), t('Drag just beside it')],
+                [
+                  t('Draw a propagator'),
+                  t('Edge tool: drag from a vertex or empty space'),
+                ],
+                [t('Self-loop'), t('Edge tool: drag out of a vertex and back')],
+                [t('Move a vertex'), t('Select tool: drag it')],
                 [t('Rotate or resize a loop'), t('Drag its handle (Shift: 15°)')],
                 [t('选择 / 顶点 / 连线'), 'V / N / A'],
                 [t('标注 / 平移'), 'T / P'],
                 [t('临时平移'), t('Space + 拖动')],
                 [t('画布平移'), t('滚动')],
                 [t('画布缩放'), t('⌘ / Ctrl + 滚动')],
-                [t('多选 / 框选'), t('Shift + 点击 / 拖动')],
+                [t('多选 / 框选'), t('Shift + click / drag empty space')],
                 [t('编辑数学标签'), t('Enter / click again')],
                 [t('移动选中图形'), t('方向键')],
                 [t('精细移动'), t('Alt + 方向键')],

@@ -389,6 +389,33 @@ function axisIntersections(from, to, edge, component, coordinate) {
   return roots.filter((t) => t >= 0.02 && t <= 0.98)
 }
 
+// With grid snapping on, a vertex joining a propagator still lands on the grid:
+// at a grid point the curve passes through, or else where it crosses a grid line.
+function gridEdgePoint(document, point, step, tolerance, exclude) {
+  const gridPoint = point.map((x) => Math.round(x / step) * step)
+  const exact = nearestEdge(document, gridPoint, 0.5, exclude)
+  if (exact) return exact
+  const projection = nearestEdge(document, point, tolerance, exclude)
+  if (!projection) return null
+  const nodes = new Map(document.nodes.map((n) => [n.id, n])),
+    {edge} = projection,
+    from = nodes.get(edge.from),
+    to = nodes.get(edge.to),
+    curve = edgeCurve(from, to, edge)
+  let best = null
+  for (const component of [0, 1]) {
+    const nearest = Math.floor(projection.point[component] / step)
+    for (let k = nearest - 1; k <= nearest + 2; k++)
+      for (const t of axisIntersections(from, to, edge, component, k * step) || []) {
+        const candidate = curve(t).point,
+          distance = length(sub(candidate, point))
+        if (distance <= step && (!best || distance < best.distance))
+          best = {point: candidate, distance, attachment: {edge: edge.id, t}, edge}
+      }
+  }
+  return best || projection
+}
+
 export function snapToGeometry(
   document,
   point,
@@ -399,6 +426,7 @@ export function snapToGeometry(
     tolerance = 14,
     exclude = new Set(),
     forceAxis = false,
+    grid = 0,
   } = {},
 ) {
   const alignments = []
@@ -455,7 +483,11 @@ export function snapToGeometry(
     if (best) return best
   }
   const projection =
-    toEdges && !forceAxis ? nearestEdge(document, point, tolerance, exclude) : null
+    toEdges && !forceAxis
+      ? grid
+        ? gridEdgePoint(document, point, grid, tolerance, exclude)
+        : nearestEdge(document, point, tolerance, exclude)
+      : null
   if (projection) return {...projection, axis: null, anchor: null}
   return alignments[0]
     ? {...alignments[0], attachment: null}

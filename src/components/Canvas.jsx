@@ -9,7 +9,6 @@ import {
   bounds,
   edgeCurve,
   length,
-  nearestEdge,
   normalizeAngle,
   scale,
   snapToGeometry,
@@ -20,6 +19,7 @@ import {
   clone,
   edge as makeEdge,
   key,
+  movingNodes,
   selected,
   snap,
   attachmentExclusions,
@@ -150,6 +150,7 @@ export default function Canvas({
       axes: snapAxes,
       toEdges: snapToEdges,
       tolerance: 14 / view.zoom,
+      grid: snapEnabled ? GRID / 2 : 0,
     })
     if (!placed.attachment) {
       const position = snap(placed.point, snapEnabled)
@@ -226,7 +227,6 @@ export default function Canvas({
       startAttachment,
       screen,
       hadConnection: Boolean(options.hadConnection),
-      fromSelect: Boolean(options.fromSelect),
       reach: previous?.reach || 0,
       apex: previous?.apex || [0, 0],
       area: previous?.area || 0,
@@ -250,15 +250,15 @@ export default function Canvas({
       })
     }
   }
-  const updateHover = (position, event) => {
+  const updateHover = (position) => {
     if (tool === 'pan' || panHeld || tool === 'text') return setHover(null)
     const hit = nodeHit(position)
     if (hit) {
-      setHover({id: hit.node.id, zone: tool === 'select' ? hit.zone : 'core'})
+      setHover({id: hit.node.id, zone: tool === 'select' ? 'ring' : 'core'})
       guide(null)
       return
     }
-    if (tool === 'select' && event.target.closest('[data-kind]')) {
+    if (tool === 'select') {
       setHover(null)
       guide(null)
       return
@@ -289,7 +289,7 @@ export default function Canvas({
       return
     }
     // A selected vertex's label can be dragged, except over the vertex centre,
-    // which still starts a propagator.
+    // which still moves the vertex.
     if (
       tool === 'select' &&
       target?.dataset.kind === 'vertex-label' &&
@@ -325,34 +325,14 @@ export default function Canvas({
       )
       return
     }
-    // The selection tool follows quiver: drag from a vertex centre, a
-    // propagator or empty space to draw, and from around a vertex to move it.
+    // The selection tool only selects and moves; drawing belongs to the edge
+    // tool. Dragging an item moves the selection, and empty space draws a marquee.
     const kind = target?.dataset.kind,
       hit = nodeHit(position)
-    const only = (itemKey) => selection.length === 1 && selection[0] === itemKey
-    if (!event.shiftKey && hit?.zone === 'core') {
-      gesture.current = {
-        type: 'press',
-        node: hit.node,
-        screen,
-        position,
-        wasSelected: only(key('node', hit.node.id)),
-      }
-      return
-    }
-    if (!event.shiftKey && !hit && kind === 'edge') {
-      gesture.current = {
-        type: 'press',
-        edgeID: target.dataset.id,
-        screen,
-        position,
-        wasSelected: only(key('edge', target.dataset.id)),
-      }
-      return
-    }
     if (hit || kind) {
-      const itemKey = hit ? key('node', hit.node.id) : key(kind, target.dataset.id)
-      const wasSelected = only(itemKey)
+      const id = hit ? hit.node.id : target.dataset.id,
+        itemKey = hit ? key('node', id) : key(kind, id)
+      const wasSelected = selection.length === 1 && selection[0] === itemKey
       const next = event.shiftKey
         ? selection.includes(itemKey)
           ? selection.filter((k) => k !== itemKey)
@@ -361,48 +341,45 @@ export default function Canvas({
           ? selection
           : [itemKey]
       onSelection(next)
-      gesture.current =
-        itemKey.startsWith('edge:') || !next.includes(itemKey)
-          ? {type: 'click', screen}
-          : {
-              type: 'move',
-              start: position,
-              screen,
-              original: clone(diagram),
-              selection: next,
-              focus: wasSelected && !event.shiftKey,
-            }
+      // The grabbed item snaps to the grid; the rest of the selection follows.
+      const grabbed = hit
+        ? hit.node.position
+        : kind === 'text'
+          ? diagram.annotations.find((a) => a.id === id)?.position
+          : diagram.nodes.find(
+              (n) => n.id === diagram.edges.find((e) => e.id === id)?.from,
+            )?.position
+      gesture.current = next.includes(itemKey)
+        ? {
+            type: 'move',
+            start: position,
+            anchor: grabbed || position,
+            screen,
+            original: clone(diagram),
+            selection: next,
+            focus: wasSelected && !event.shiftKey,
+          }
+        : {type: 'click', screen}
       return
     }
-    if (event.shiftKey) {
-      gesture.current = {type: 'marquee', start: position, screen, selection}
-      setMarquee({start: position, end: position})
-      return
+    gesture.current = {
+      type: 'marquee',
+      start: position,
+      screen,
+      selection: event.shiftKey ? selection : [],
     }
-    gesture.current = {type: 'press', screen, position}
-    onSelection([])
+    setMarquee({start: position, end: position})
+    if (!event.shiftKey) onSelection([])
   }
   const pointerMove = (event) => {
-    let g = gesture.current
+    const g = gesture.current
     const position = coordinates(event)
     if (!g) {
       if (connection) {
         trace(connectionTrace.current, position)
         drawTo({...connectionTrace.current, startID: connection.id}, position, event)
-      } else updateHover(position, event)
+      } else updateHover(position)
       return
-    }
-    if (g.type === 'press') {
-      if (Math.hypot(event.clientX - g.screen[0], event.clientY - g.screen[1]) <= CLICK)
-        return
-      const parent = g.edgeID && diagram.edges.find((e) => e.id === g.edgeID)
-      const start = g.node
-        ? {point: g.node.position, attachment: g.node.attachment}
-        : (parent &&
-            nearestEdge({...diagram, edges: [parent]}, g.position, 40 / view.zoom)) ||
-          placement(g.position)
-      beginDraw(start.point, g.node, start.attachment, g.screen, {fromSelect: true})
-      g = gesture.current
     }
     if (g.type === 'pan') {
       setView({
@@ -449,8 +426,9 @@ export default function Canvas({
       })
     } else if (g.type === 'move') {
       const raw = sub(position, g.start)
-      const delta = snapEnabled ? snap(raw) : raw
-      const chosen = g.original.nodes.filter((n) => selected(g.selection, 'node', n.id)),
+      const delta = snapEnabled ? sub(snap(add(g.anchor, raw)), g.anchor) : raw
+      const moving = movingNodes(g.original, g.selection)
+      const chosen = g.original.nodes.filter((n) => moving.has(n.id)),
         excluded = attachmentExclusions(
           g.original,
           chosen.map((n) => n.id),
@@ -482,7 +460,7 @@ export default function Canvas({
       onPreview({
         ...g.original,
         nodes: g.original.nodes.map((n) =>
-          selected(g.selection, 'node', n.id)
+          moving.has(n.id)
             ? {
                 ...n,
                 position:
@@ -509,13 +487,8 @@ export default function Canvas({
       Math.hypot(event.clientX - g.screen[0], event.clientY - g.screen[1]) > CLICK
     gesture.current = null
     guide(null)
-    if (g.type === 'press') {
-      // A click selects; clicking the selected object again edits its label.
-      const itemKey = g.node ? key('node', g.node.id) : g.edgeID && key('edge', g.edgeID)
-      if (itemKey && g.wasSelected) onEditLabel()
-      else if (itemKey) onSelection([itemKey])
-    }
     if (g.type === 'move') {
+      // Clicking the selected object again edits its label.
       if (moved) onCommit()
       else {
         onPreview(g.original)
@@ -550,17 +523,7 @@ export default function Canvas({
       }
       const placed = endpointPlacement(position, g.start, event)
       const endNode = placed.node
-      const distinct = endNode
-        ? endNode.id !== g.startID
-        : length(sub(placed.point, g.start)) > 1e-6
-      if (g.fromSelect) {
-        if (distinct)
-          onConnect(g.start, placed.point, g.startID, endNode?.id, {
-            from: g.startAttachment,
-            to: endNode?.attachment || placed.attachment,
-          })
-        reset()
-      } else if (moved || g.hadConnection) {
+      if (moved || g.hadConnection) {
         onConnect(g.start, placed.point, g.startID, endNode?.id, {
           from: g.startAttachment,
           to: endNode?.attachment || placed.attachment,
@@ -630,10 +593,10 @@ export default function Canvas({
     ),
     [diagram, selection, view.zoom],
   )
-  // Quiver-style dashed cell borders whose dashes cross at each corner; grid
-  // points sit in the middle of cells, where quiver places its objects.
-  const cell = GRID * view.zoom,
-    dash = cell / 16,
+  // Quiver-style dashed lines whose dashes cross at each corner. The lines run
+  // through the snap points, so a snapped vertex always sits on a crossing.
+  const cell = (GRID / 2) * view.zoom,
+    dash = cell / 8,
     origin = [size[0] / 2 + view.x, size[1] / 2 + view.y]
   const transform = `translate(${origin[0]} ${origin[1]}) scale(${view.zoom})`
   const nodes = new Map(diagram.nodes.map((n) => [n.id, n]))
@@ -699,8 +662,8 @@ export default function Canvas({
             width={cell}
             height={cell}
             patternUnits="userSpaceOnUse"
-            x={origin[0]}
-            y={origin[1]}
+            x={origin[0] - cell / 2}
+            y={origin[1] - cell / 2}
           >
             <path
               class="grid-line"
